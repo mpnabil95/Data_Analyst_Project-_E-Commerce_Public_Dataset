@@ -1,8 +1,8 @@
-"""Dashboard Streamlit interaktif untuk Brazilian E-Commerce Public Dataset.
+"""Dashboard Streamlit dark-only final untuk Brazilian E-Commerce Public Dataset.
 
 Jalankan aplikasi dari folder yang berisi file ini dengan perintah:
 
-    streamlit run app_2.py
+    streamlit run app_2_v15.py
 
 Dependensi utama:
 
@@ -49,165 +49,477 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# UI theme preference
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
-
+# Dashboard v14 menggunakan satu design system: dark mode.
+DARK_MODE = True
 
 COLORS = {
-    "navy": "#0B1739",
-    "blue": "#2563EB",
-    "cyan": "#06B6D4",
-    "violet": "#7C3AED",
-    "emerald": "#10B981",
+    "navy": "#07111F",
+    "surface": "#0D1828",
+    "surface_2": "#111F32",
+    "blue": "#2F6BFF",
+    "cyan": "#10BFD6",
+    "violet": "#8B5CF6",
+    "emerald": "#18B88A",
     "amber": "#F59E0B",
-    "rose": "#F43F5E",
-    "muted": "#64748B",
-    "grid": "#E8EEF7",
+    "rose": "#FF3F68",
+    "text": "#F8FAFC",
+    "muted": "#9AA9BC",
+    "grid": "rgba(148,163,184,.18)",
+    "border": "rgba(100,116,139,.38)",
 }
+
+
+STATE_NAMES = {
+    "AC": "Acre",
+    "AL": "Alagoas",
+    "AP": "Amapá",
+    "AM": "Amazonas",
+    "BA": "Bahia",
+    "CE": "Ceará",
+    "DF": "Distrito Federal",
+    "ES": "Espírito Santo",
+    "GO": "Goiás",
+    "MA": "Maranhão",
+    "MT": "Mato Grosso",
+    "MS": "Mato Grosso do Sul",
+    "MG": "Minas Gerais",
+    "PA": "Pará",
+    "PB": "Paraíba",
+    "PR": "Paraná",
+    "PE": "Pernambuco",
+    "PI": "Piauí",
+    "RJ": "Rio de Janeiro",
+    "RN": "Rio Grande do Norte",
+    "RS": "Rio Grande do Sul",
+    "RO": "Rondônia",
+    "RR": "Roraima",
+    "SC": "Santa Catarina",
+    "SP": "São Paulo",
+    "SE": "Sergipe",
+    "TO": "Tocantins",
+    "Unknown": "Tidak diketahui",
+}
+
+
+def format_state_name(code: Any, include_code: bool = True) -> str:
+    """Mengubah kode state menjadi nama lengkap yang mudah dipahami."""
+    normalized = str(code)
+    full_name = STATE_NAMES.get(normalized, normalized)
+    if include_code and normalized not in {"Unknown", "nan", "None"}:
+        return f"{full_name} ({normalized})"
+    return full_name
+
+
+def shorten_label(value: Any, max_length: int = 26) -> str:
+    """Memendekkan label panjang tanpa menghilangkan konteks utamanya."""
+    label = str(value)
+    return label if len(label) <= max_length else f"{label[: max_length - 1]}…"
 
 st.markdown(
     """
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+        :root {
+            color-scheme: dark;
+            --app-bg: #07111F;
+            --app-bg-soft: #091525;
+            --surface: #0D1828;
+            --surface-raised: #111F32;
+            --surface-input: #08111E;
+            --border: rgba(100,116,139,.38);
+            --border-soft: rgba(100,116,139,.24);
+            --text: #F8FAFC;
+            --text-secondary: #CBD5E1;
+            --muted: #94A3B8;
+            --primary: #2F6BFF;
+            --cyan: #10BFD6;
+        }
+
+        html, body, [class*="css"] {
+            font-family: 'Inter', sans-serif;
+        }
+
+        html, body,
+        [data-testid="stAppViewContainer"],
         .stApp {
             background:
-                radial-gradient(circle at 85% -10%, rgba(37,99,235,.10), transparent 28%),
-                radial-gradient(circle at 5% 15%, rgba(6,182,212,.07), transparent 24%),
-                #F7F9FC;
+                radial-gradient(circle at 84% -12%, rgba(47,107,255,.13), transparent 30%),
+                radial-gradient(circle at 8% 22%, rgba(16,191,214,.06), transparent 26%),
+                linear-gradient(180deg, var(--app-bg) 0%, #07101D 100%) !important;
+            color: var(--text) !important;
         }
+
+        [data-testid="stHeader"] {
+            background: rgba(5,10,18,.96) !important;
+            border-bottom: 1px solid rgba(100,116,139,.14);
+        }
+
+        [data-testid="stDecoration"] {
+            background: linear-gradient(90deg, #2F6BFF, #10BFD6) !important;
+        }
+
+        .block-container {
+            padding-top: .7rem;
+            padding-bottom: 2.2rem;
+            max-width: 1540px;
+        }
+
+        /* Sidebar */
         [data-testid="stSidebar"] {
-            background: linear-gradient(180deg, #07132F 0%, #0B1739 52%, #102553 100%);
-            border-right: 1px solid rgba(255,255,255,.08);
+            background:
+                linear-gradient(180deg, #07142A 0%, #0A1A36 55%, #0D2347 100%) !important;
+            border-right: 1px solid rgba(148,163,184,.18);
         }
-        [data-testid="stSidebar"] * { color: #F8FAFC; }
-        [data-testid="stSidebar"] .stMultiSelect span,
-        [data-testid="stSidebar"] .stDateInput input,
-        [data-testid="stSidebar"] .stSelectbox div,
-        [data-testid="stSidebar"] .stFileUploader small { color: #0F172A !important; }
-        [data-testid="stSidebar"] hr { border-color: rgba(255,255,255,.15); }
-        .block-container { padding-top: 1.4rem; padding-bottom: 2rem; max-width: 1540px; }
+
+        [data-testid="stSidebar"] * {
+            color: #F8FAFC;
+        }
+
+        [data-testid="stSidebar"] hr {
+            border-color: rgba(148,163,184,.20);
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="select"] > div,
+        [data-testid="stSidebar"] [data-baseweb="input"] > div,
+        [data-testid="stSidebar"] [data-testid="stDateInput"] > div > div,
+        [data-testid="stSidebar"] [data-testid="stFileUploaderDropzone"],
+        [data-testid="stSidebar"] button[kind="secondary"] {
+            background: #08111E !important;
+            border-color: rgba(100,116,139,.34) !important;
+            color: #F8FAFC !important;
+        }
+
+        [data-testid="stSidebar"] input,
+        [data-testid="stSidebar"] textarea {
+            color: #E2E8F0 !important;
+            -webkit-text-fill-color: #E2E8F0 !important;
+            caret-color: #E2E8F0 !important;
+        }
+
+        [data-testid="stSidebar"] input::placeholder,
+        [data-testid="stSidebar"] textarea::placeholder {
+            color: #64748B !important;
+            opacity: 1 !important;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="tag"] {
+            background: rgba(255,63,104,.90) !important;
+            color: white !important;
+        }
+
+        [data-testid="stSidebar"] .state-guide {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: .18rem;
+            max-height: 330px;
+            overflow-y: auto;
+            padding-right: .25rem;
+        }
+
+        [data-testid="stSidebar"] .state-guide-row {
+            display: grid;
+            grid-template-columns: 2.15rem 1fr;
+            gap: .45rem;
+            align-items: baseline;
+            padding: .24rem .1rem;
+            border-bottom: 1px solid rgba(148,163,184,.10);
+            font-size: .76rem;
+        }
+
+        [data-testid="stSidebar"] .state-code {
+            color: #7DD3FC !important;
+            font-weight: 800;
+        }
+
+        [data-testid="stSidebar"] .state-name {
+            color: #CBD5E1 !important;
+        }
+
+        [data-testid="stSidebar"] [data-baseweb="popover"] *,
+        [data-baseweb="popover"] * {
+            color: #E5E7EB;
+        }
+
+        div[role="listbox"] {
+            background: #0B1728 !important;
+            border: 1px solid rgba(100,116,139,.38) !important;
+        }
+
+        div[role="option"] {
+            background: #0B1728 !important;
+            color: #E5E7EB !important;
+        }
+
+        div[role="option"]:hover,
+        div[aria-selected="true"] {
+            background: #142743 !important;
+        }
+
+        /* Hero */
         .hero {
-            padding: 1.45rem 1.65rem;
+            padding: 1.35rem 1.65rem;
             border-radius: 22px;
-            background: linear-gradient(120deg, #0B1739 0%, #173A7A 58%, #2563EB 100%);
-            color: white;
-            box-shadow: 0 18px 50px rgba(11,23,57,.16);
-            margin-bottom: 1.1rem;
+            background:
+                linear-gradient(120deg, #0C2148 0%, #173F82 58%, #2F6BFF 100%);
+            color: #FFFFFF;
+            border: 1px solid rgba(96,165,250,.22);
+            box-shadow: 0 22px 55px rgba(0,0,0,.27);
+            margin-bottom: 1.05rem;
             position: relative;
             overflow: hidden;
         }
+
         .hero:after {
             content: '';
             position: absolute;
-            width: 240px; height: 240px; right: -70px; top: -110px;
-            border: 40px solid rgba(255,255,255,.07); border-radius: 50%;
-        }
-        .hero-kicker { font-size: .74rem; font-weight: 700; letter-spacing: .16em; opacity: .72; }
-        .hero-title { font-size: clamp(1.65rem, 3vw, 2.45rem); font-weight: 800; line-height: 1.12; margin: .35rem 0; }
-        .hero-subtitle { font-size: .94rem; color: #DCE8FF; max-width: 880px; }
-        .metric-card {
-            background: rgba(255,255,255,.94);
-            border: 1px solid #E7ECF4;
-            border-radius: 17px;
-            padding: 1.05rem 1.1rem;
-            min-height: 126px;
-            box-shadow: 0 7px 25px rgba(15,23,42,.055);
-            position: relative;
-            overflow: hidden;
-        }
-        .metric-card:before {
-            content: ''; position: absolute; left: 0; top: 0; bottom: 0;
-            width: 4px; background: var(--accent);
-        }
-        .metric-title { color: #64748B; font-size: .74rem; font-weight: 700; letter-spacing: .055em; text-transform: uppercase; }
-        .metric-value { color: #0F172A; font-size: 1.72rem; font-weight: 800; margin: .38rem 0 .2rem; white-space: nowrap; }
-        .metric-note { color: #64748B; font-size: .75rem; }
-        .spark { width:100%; height:32px; margin:.15rem 0; }
-        .spark polyline { fill:none; stroke:#2563EB; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
-        
-        .spark-mini {
-            width:100%;
-            height:32px;
-            margin:8px 0 4px;
-        }
-        .spark-mini polyline {
-            fill:none;
-            stroke:var(--accent);
-            stroke-width:3;
-            stroke-linecap:round;
-            stroke-linejoin:round;
+            width: 240px;
+            height: 240px;
+            right: -68px;
+            top: -114px;
+            border: 40px solid rgba(255,255,255,.075);
+            border-radius: 50%;
         }
 
-        .section-title { color: #0B1739; font-size: 1.12rem; font-weight: 800; margin: .3rem 0 .1rem; }
-        .section-note { color: #64748B; font-size: .82rem; margin-bottom: .7rem; }
+        .hero-kicker {
+            color: #C8D8F3;
+            font-size: .72rem;
+            font-weight: 800;
+            letter-spacing: .16em;
+        }
+
+        .hero-title {
+            color: #FFFFFF;
+            font-size: clamp(1.7rem, 3vw, 2.45rem);
+            font-weight: 800;
+            line-height: 1.12;
+            margin: .35rem 0;
+        }
+
+        .hero-subtitle {
+            color: #E2ECFF;
+            font-size: .92rem;
+            max-width: 930px;
+        }
+
+        /* KPI cards berbasis native Streamlit */
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"]) {
+            background:
+                linear-gradient(180deg, rgba(15,29,48,.98), rgba(10,20,35,.98)) !important;
+            border: 1px solid rgba(100,116,139,.42) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 12px 30px rgba(0,0,0,.20) !important;
+            min-height: 210px;
+            padding: .9rem .95rem .78rem;
+            overflow: hidden;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stMetric"] {
+            padding: 0;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stMetricLabel"] {
+            color: #B5C2D3 !important;
+            font-size: .72rem !important;
+            font-weight: 800 !important;
+            letter-spacing: .055em !important;
+            line-height: 1.22 !important;
+            text-transform: uppercase;
+            min-height: 1.8rem;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stMetricValue"] {
+            color: #FFFFFF !important;
+            font-size: clamp(1.62rem, 2.15vw, 2.1rem) !important;
+            font-weight: 800 !important;
+            line-height: 1.08 !important;
+            margin-top: .16rem;
+            white-space: nowrap;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stMetricDelta"] {
+            font-size: .74rem !important;
+            font-weight: 700 !important;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stPlotlyChart"] {
+            margin-top: -.15rem;
+            margin-bottom: -.35rem;
+        }
+
+        div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"])
+        div[data-testid="stCaptionContainer"] p {
+            color: #9AA9BC !important;
+            font-size: .74rem !important;
+            line-height: 1.3 !important;
+            margin: 0 !important;
+        }
+
+        /* Section typography */
+        .section-title {
+            color: #F8FAFC;
+            font-size: 1.08rem;
+            font-weight: 800;
+            margin: .35rem 0 .1rem;
+        }
+
+        .section-note {
+            color: #9AA9BC;
+            font-size: .80rem;
+            margin-bottom: .68rem;
+        }
+
         .insight-box {
-            background: linear-gradient(100deg, rgba(37,99,235,.08), rgba(6,182,212,.06));
-            border: 1px solid rgba(37,99,235,.14);
-            border-left: 4px solid #2563EB;
+            background:
+                linear-gradient(100deg, rgba(47,107,255,.12), rgba(16,191,214,.07));
+            border: 1px solid rgba(47,107,255,.26);
+            border-left: 4px solid #2F6BFF;
             border-radius: 14px;
-            padding: .9rem 1.05rem;
-            color: #334155;
-            font-size: .86rem;
+            padding: .88rem 1.02rem;
+            color: #D5DFEC;
+            font-size: .84rem;
             margin: .45rem 0 .9rem;
         }
-        .chart-shell {
-            background: #FFFFFF; border: 1px solid #D7E0EE; border-radius: 18px;
-            padding: .35rem .6rem; box-shadow: 0 7px 25px rgba(15,23,42,.045);
+
+        /* Tabs: setiap menu dibungkus seperti tombol/pill */
+        div[data-testid="stTabs"] [role="tablist"] {
+            display: flex;
+            flex-wrap: wrap;
+            gap: .55rem;
+            padding: .28rem 0 .72rem;
+            border-bottom: 1px solid rgba(100,116,139,.28);
         }
-        div[data-testid="stTabs"] button { font-weight: 700; }
-        div[data-testid="stDataFrame"] { border: 1px solid #E7ECF4; border-radius: 14px; overflow: hidden; }
-        .stDownloadButton button {
-            border-radius: 10px; border: 1px solid #2563EB; color: #2563EB;
-            font-weight: 700; background: white;
+
+        div[data-testid="stTabs"] button[role="tab"] {
+            width: auto !important;
+            min-width: max-content !important;
+            height: auto !important;
+            padding: .52rem .88rem !important;
+            border: 1px solid rgba(100,116,139,.34) !important;
+            border-radius: 10px !important;
+            background: rgba(13,24,40,.72) !important;
+            color: #CBD5E1 !important;
+            font-weight: 700 !important;
+            transition:
+                background .18s ease,
+                border-color .18s ease,
+                transform .18s ease;
         }
-        .spark {
-            width:100%;
-            height:36px;
-            margin-top:10px;
-            overflow:visible;
+
+        div[data-testid="stTabs"] button[role="tab"]:hover {
+            background: rgba(24,43,70,.92) !important;
+            border-color: rgba(96,165,250,.55) !important;
+            color: #FFFFFF !important;
+            transform: translateY(-1px);
         }
-        .spark polyline {
-            fill:none;
-            stroke:#38BDF8;
-            stroke-width:3;
-            stroke-linecap:round;
-            stroke-linejoin:round;
+
+        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+            background:
+                linear-gradient(135deg, rgba(47,107,255,.28), rgba(139,92,246,.20)) !important;
+            border-color: rgba(96,165,250,.75) !important;
+            color: #FFFFFF !important;
+            box-shadow: inset 0 0 0 1px rgba(47,107,255,.14);
         }
-        @media (max-width: 768px) {
-            .block-container { padding-left: .6rem; padding-right: .6rem; }
-            .metric-value { font-size:1.35rem; }
-            .hero-title { font-size:1.5rem; }
+
+        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
+        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
+            display: none !important;
         }
-        footer { visibility: hidden; }
+
+        /* Inputs di area utama */
+        [data-baseweb="select"] > div,
+        [data-baseweb="input"] > div,
+        [data-testid="stDateInput"] > div > div {
+            background: var(--surface-input) !important;
+            border-color: var(--border) !important;
+            color: var(--text) !important;
+        }
+
+        input, textarea {
+            color: #E5E7EB !important;
+            -webkit-text-fill-color: #E5E7EB !important;
+        }
+
+        /* Expanders, frames, table, map */
+        [data-testid="stExpander"] {
+            background: rgba(13,24,40,.52);
+            border: 1px solid rgba(100,116,139,.30);
+            border-radius: 12px;
+        }
+
+        div[data-testid="stDataFrame"] {
+            border: 1px solid rgba(100,116,139,.34);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        iframe {
+            border-radius: 15px;
+            border: 1px solid rgba(100,116,139,.30);
+        }
+
+        /* Buttons */
+        .stDownloadButton button,
+        .stButton button {
+            background: #10213A !important;
+            color: #EAF1FF !important;
+            border: 1px solid rgba(96,165,250,.38) !important;
+            border-radius: 10px !important;
+            font-weight: 700 !important;
+        }
+
+        .stDownloadButton button:hover,
+        .stButton button:hover {
+            background: #17345C !important;
+            border-color: #4F8CFF !important;
+        }
+
+        /* Alerts and captions */
+        [data-testid="stCaptionContainer"] p {
+            color: #94A3B8;
+        }
+
+        [data-testid="stAlert"] {
+            background: rgba(17,31,50,.86);
+            color: #E2E8F0;
+            border-color: rgba(100,116,139,.34);
+        }
+
+        hr {
+            border-color: rgba(100,116,139,.24) !important;
+        }
+
+        footer {
+            visibility: hidden;
+        }
+
+        @media (max-width: 900px) {
+            .block-container {
+                padding-left: .72rem;
+                padding-right: .72rem;
+            }
+
+            .hero {
+                padding: 1.1rem 1.15rem;
+            }
+
+            .hero-title {
+                font-size: 1.55rem;
+            }
+
+            div[data-testid="stVerticalBlockBorderWrapper"]:has(div[data-testid="stMetric"]) {
+                min-height: 188px;
+            }
+        }
     </style>
     """,
     unsafe_allow_html=True,
 )
-
-# Responsive + dark mode enhancement
-if st.session_state.dark_mode:
-    st.markdown("""
-    <style>
-    .stApp { background:#0B1220 !important; }
-    .metric-card,.chart-shell { background:#111827 !important; border-color:#263449 !important; }
-    .metric-title,.metric-note,.section-note { color:#CBD5E1 !important; }
-    .metric-value,.section-title { color:#F8FAFC !important; }
-    </style>
-    """, unsafe_allow_html=True)
-
-st.markdown("""
-<style>
-@media (max-width: 900px) {
-    .block-container { padding-left: .7rem; padding-right: .7rem; }
-    .hero-title { font-size: 1.5rem !important; }
-    .metric-card { min-height:100px; padding:.8rem; }
-    .metric-value { font-size:1.25rem; }
-}
-</style>
-""", unsafe_allow_html=True)
-
 
 # -----------------------------------------------------------------------------
 # Penemuan dan pembacaan sumber data
@@ -472,12 +784,12 @@ def format_integer(value: float | int) -> str:
     return f"{int(value):,}".replace(",", ".")
 
 
-def percent_delta(current: float, previous: float) -> str:
+def percent_delta(current: float, previous: float) -> str | None:
+    """Menghasilkan delta ringkas untuk st.metric; None jika pembanding tidak valid."""
     if not np.isfinite(previous) or previous == 0:
-        return "Periode pembanding tidak tersedia"
+        return None
     delta = (current - previous) / abs(previous) * 100
-    arrow = "▲" if delta >= 0 else "▼"
-    return f"{arrow} {abs(delta):.1f}% vs periode sebelumnya"
+    return f"{delta:+.1f}% vs periode lalu"
 
 
 def clean_metric_text(text: str) -> str:
@@ -489,68 +801,71 @@ def clean_metric_text(text: str) -> str:
 def render_kpi_card(
     title: str,
     value: str,
-    delta: str,
     accent: str,
+    *,
+    delta: str | None = None,
+    note: str | None = None,
     spark: list[float] | None = None,
+    key: str,
 ) -> None:
     """
-    KPI card stabil berbasis komponen native Streamlit.
-    Tidak menggunakan HTML custom untuk value/note sehingga
-    mencegah HTML tampil sebagai teks.
+    KPI card final berbasis komponen native Streamlit.
+
+    - Label, value, dan delta memakai st.metric.
+    - Catatan memakai st.caption.
+    - Sparkline memakai Plotly dan tidak disisipkan ke string HTML.
     """
 
+    valid_spark = [
+        float(item)
+        for item in (spark or [])
+        if item is not None and np.isfinite(item)
+    ]
+
     with st.container(border=True):
-        st.markdown(
-            f"""
-            <div style="
-                border-left:4px solid {accent};
-                padding-left:12px;
-                margin-bottom:6px;
-            ">
-                <span style="
-                    color:#94A3B8;
-                    font-size:0.75rem;
-                    font-weight:700;
-                    letter-spacing:.05em;
-                    text-transform:uppercase;
-                ">
-                    {html.escape(str(title))}
-                </span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
         st.metric(
-            label="",
+            label=title.upper(),
             value=str(value),
-            delta=str(delta) if delta else None,
+            delta=delta,
+            delta_color="normal",
         )
 
-        if spark:
+        if len(valid_spark) >= 2:
+            x_values = list(range(len(valid_spark)))
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
-                    y=spark,
+                    x=x_values,
+                    y=valid_spark,
                     mode="lines",
-                    line=dict(color=accent, width=2),
+                    line=dict(color=accent, width=2.6, shape="spline"),
+                    fill="tozeroy",
+                    fillcolor=f"rgba({int(accent[1:3], 16)},{int(accent[3:5], 16)},{int(accent[5:7], 16)},0.10)",
                     hoverinfo="skip",
                 )
             )
             fig.update_layout(
-                height=45,
-                margin=dict(l=0, r=0, t=0, b=0),
+                height=42,
+                margin=dict(l=0, r=0, t=2, b=0),
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
                 showlegend=False,
-                xaxis=dict(visible=False),
-                yaxis=dict(visible=False),
+                xaxis=dict(visible=False, fixedrange=True),
+                yaxis=dict(visible=False, fixedrange=True),
             )
             st.plotly_chart(
                 fig,
                 use_container_width=True,
-                config={"displayModeBar": False},
+                config={"displayModeBar": False, "staticPlot": True},
+                key=f"spark_{key}",
             )
+        else:
+            # Menjaga tinggi card konsisten ketika trend tidak cukup panjang.
+            st.write("")
+
+        if note:
+            st.caption(note)
+
 
 def section_heading(title: str, note: str = "") -> None:
     st.markdown(f'<div class="section-title">{html.escape(title)}</div>', unsafe_allow_html=True)
@@ -559,48 +874,62 @@ def section_heading(title: str, note: str = "") -> None:
 
 
 def style_figure(fig: go.Figure, height: int = 380) -> go.Figure:
-    """Menerapkan gaya visual kontras tinggi agar grafik terbaca pada background dashboard."""
+    """Menerapkan satu design system Plotly khusus dark mode."""
+    text_color = "#DCE6F3"
+    title_color = "#F8FAFC"
+    grid_color = "rgba(148,163,184,.17)"
+    axis_color = "rgba(148,163,184,.30)"
+    hover_bg = "#111F32"
+    hover_text = "#F8FAFC"
+
     fig.update_layout(
         height=height,
-        margin=dict(l=25, r=25, t=55, b=30),
-        paper_bgcolor="#FFFFFF",
-        plot_bgcolor="#FFFFFF",
-        font=dict(
-            family="Inter, sans-serif",
-            color="#1E293B",
-            size=12
-        ),
-        title_font=dict(size=16, color="#0B1739"),
+        margin=dict(l=25, r=25, t=38, b=30),
+        title=dict(text=""),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color=text_color, size=12),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=1.015,
             xanchor="right",
             x=1,
-            font=dict(color="#334155")
+            font=dict(color=text_color),
+            bgcolor="rgba(0,0,0,0)",
         ),
         hoverlabel=dict(
-            bgcolor="white",
-            font_color="#0F172A"
+            bgcolor=hover_bg,
+            bordercolor="rgba(148,163,184,.30)",
+            font_color=hover_text,
+        ),
+        coloraxis_colorbar=dict(
+            tickfont=dict(color=text_color),
+            title_font=dict(color=text_color),
+            bgcolor="rgba(0,0,0,0)",
+            outlinecolor="rgba(148,163,184,.25)",
         ),
     )
 
     fig.update_xaxes(
         showgrid=False,
-        linecolor="#CBD5E1",
-        tickfont=dict(color="#475569"),
-        title_font=dict(color="#334155")
+        linecolor=axis_color,
+        tickfont=dict(color=text_color),
+        title_font=dict(color=text_color),
+        zeroline=False,
     )
 
     fig.update_yaxes(
-        gridcolor="#E2E8F0",
+        gridcolor=grid_color,
+        linecolor=axis_color,
         zeroline=False,
-        tickfont=dict(color="#475569"),
-        title_font=dict(color="#334155")
+        tickfont=dict(color=text_color),
+        title_font=dict(color=text_color),
     )
 
+    fig.update_annotations(font=dict(color=title_color))
+    fig.update_traces(textfont=dict(color=text_color), selector=dict(type="pie"))
     return fig
-
 
 
 def apply_filters(
@@ -654,7 +983,8 @@ def make_customer_map(points: pd.DataFrame, mode: str) -> folium.Map:
         for row in points.itertuples(index=False):
             radius = 4 + 18 * np.sqrt(float(row.customers) / maximum)
             tooltip = (
-                f"<b>{html.escape(str(row.customer_city).title())}, {html.escape(str(row.customer_state))}</b><br>"
+                f"<b>{html.escape(str(row.customer_city).title())}, "
+                f"{html.escape(format_state_name(row.customer_state))}</b><br>"
                 f"Customer: {format_integer(row.customers)}<br>"
                 f"Pesanan: {format_integer(row.orders)}<br>"
                 f"GMV: {format_currency(row.gmv)}"
@@ -720,7 +1050,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## OLIST / BI")
         st.caption("E-commerce performance cockpit")
-        st.session_state.dark_mode = st.toggle("🌙 Dark mode", value=st.session_state.dark_mode)
+        st.caption("● Dark workspace")
         with st.expander("Sumber data", expanded=len(local_sources) < len(REQUIRED_FILES)):
             st.caption(
                 f"{len(local_sources)}/{len(REQUIRED_FILES)} dataset ditemukan otomatis. "
@@ -781,7 +1111,10 @@ def main() -> None:
         seller_state_options = sorted(fact["seller_state"].dropna().astype(str).unique())
 
         customer_states = st.multiselect(
-            "State customer", state_options, placeholder="Semua state"
+            "State customer",
+            state_options,
+            placeholder="Semua state",
+            format_func=lambda code: format_state_name(code),
         )
         categories = st.multiselect(
             "Kategori produk", category_options, placeholder="Semua kategori"
@@ -791,8 +1124,18 @@ def main() -> None:
             "Status pesanan", status_options, default=default_status, placeholder="Semua status"
         )
         seller_states = st.multiselect(
-            "State seller", seller_state_options, placeholder="Semua state seller"
+            "State seller",
+            seller_state_options,
+            placeholder="Semua state seller",
+            format_func=lambda code: format_state_name(code),
         )
+
+        with st.expander("Panduan kode state Brasil", expanded=False):
+            st.caption("Filter dan visual menggunakan nama lengkap; kode tetap ditampilkan dalam kurung.")
+            st.markdown(
+                """<div class="state-guide"><div class="state-guide-row"><span class="state-code">AC</span><span class="state-name">Acre</span></div><div class="state-guide-row"><span class="state-code">AL</span><span class="state-name">Alagoas</span></div><div class="state-guide-row"><span class="state-code">AP</span><span class="state-name">Amapá</span></div><div class="state-guide-row"><span class="state-code">AM</span><span class="state-name">Amazonas</span></div><div class="state-guide-row"><span class="state-code">BA</span><span class="state-name">Bahia</span></div><div class="state-guide-row"><span class="state-code">CE</span><span class="state-name">Ceará</span></div><div class="state-guide-row"><span class="state-code">DF</span><span class="state-name">Distrito Federal</span></div><div class="state-guide-row"><span class="state-code">ES</span><span class="state-name">Espírito Santo</span></div><div class="state-guide-row"><span class="state-code">GO</span><span class="state-name">Goiás</span></div><div class="state-guide-row"><span class="state-code">MA</span><span class="state-name">Maranhão</span></div><div class="state-guide-row"><span class="state-code">MT</span><span class="state-name">Mato Grosso</span></div><div class="state-guide-row"><span class="state-code">MS</span><span class="state-name">Mato Grosso do Sul</span></div><div class="state-guide-row"><span class="state-code">MG</span><span class="state-name">Minas Gerais</span></div><div class="state-guide-row"><span class="state-code">PA</span><span class="state-name">Pará</span></div><div class="state-guide-row"><span class="state-code">PB</span><span class="state-name">Paraíba</span></div><div class="state-guide-row"><span class="state-code">PR</span><span class="state-name">Paraná</span></div><div class="state-guide-row"><span class="state-code">PE</span><span class="state-name">Pernambuco</span></div><div class="state-guide-row"><span class="state-code">PI</span><span class="state-name">Piauí</span></div><div class="state-guide-row"><span class="state-code">RJ</span><span class="state-name">Rio de Janeiro</span></div><div class="state-guide-row"><span class="state-code">RN</span><span class="state-name">Rio Grande do Norte</span></div><div class="state-guide-row"><span class="state-code">RS</span><span class="state-name">Rio Grande do Sul</span></div><div class="state-guide-row"><span class="state-code">RO</span><span class="state-name">Rondônia</span></div><div class="state-guide-row"><span class="state-code">RR</span><span class="state-name">Roraima</span></div><div class="state-guide-row"><span class="state-code">SC</span><span class="state-name">Santa Catarina</span></div><div class="state-guide-row"><span class="state-code">SP</span><span class="state-name">São Paulo</span></div><div class="state-guide-row"><span class="state-code">SE</span><span class="state-name">Sergipe</span></div><div class="state-guide-row"><span class="state-code">TO</span><span class="state-name">Tocantins</span></div></div>""",
+                unsafe_allow_html=True,
+            )
 
         st.markdown("---")
         st.caption(
@@ -834,6 +1177,53 @@ def main() -> None:
     previous_customers = int(previous["customer_unique_id"].nunique()) if not previous.empty else 0
     previous_aov = previous_revenue / previous_orders if previous_orders else np.nan
 
+    # Trend ringkas untuk sparkline KPI.
+    if span_days > 180:
+        kpi_period = filtered["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
+    elif span_days > 60:
+        kpi_period = filtered["order_purchase_timestamp"].dt.to_period("W").dt.start_time
+    else:
+        kpi_period = filtered["order_purchase_timestamp"].dt.normalize()
+
+    kpi_trend = (
+        filtered.assign(_kpi_period=kpi_period)
+        .groupby("_kpi_period", as_index=False)
+        .agg(
+            GMV=("gmv", "sum"),
+            Pesanan=("order_id", "nunique"),
+            Customer=("customer_unique_id", "nunique"),
+        )
+        .sort_values("_kpi_period")
+    )
+    kpi_trend["AOV"] = (
+        kpi_trend["GMV"]
+        / kpi_trend["Pesanan"].replace(0, np.nan)
+    )
+
+    rating_trend = (
+        order_view.assign(
+            _kpi_period=(
+                order_view["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
+                if span_days > 180
+                else (
+                    order_view["order_purchase_timestamp"].dt.to_period("W").dt.start_time
+                    if span_days > 60
+                    else order_view["order_purchase_timestamp"].dt.normalize()
+                )
+            )
+        )
+        .groupby("_kpi_period", as_index=False)
+        .agg(Rating=("review_score", "mean"))
+        .sort_values("_kpi_period")
+    )
+
+    spark_limit = 18
+    gmv_spark = kpi_trend["GMV"].tail(spark_limit).tolist()
+    orders_spark = kpi_trend["Pesanan"].tail(spark_limit).tolist()
+    customers_spark = kpi_trend["Customer"].tail(spark_limit).tolist()
+    aov_spark = kpi_trend["AOV"].tail(spark_limit).tolist()
+    rating_spark = rating_trend["Rating"].tail(spark_limit).tolist()
+
     st.markdown(
         f"""
         <div class="hero">
@@ -852,32 +1242,48 @@ def main() -> None:
 
     metric_columns = st.columns(5, gap="small")
     with metric_columns[0]:
+        gmv_delta = percent_delta(current_revenue, previous_revenue)
         render_kpi_card(
             "GMV",
             format_currency(current_revenue),
-            percent_delta(current_revenue, previous_revenue),
             COLORS["blue"],
+            delta=gmv_delta,
+            note=None if gmv_delta else "Belum ada periode pembanding",
+            spark=gmv_spark,
+            key="gmv",
         )
     with metric_columns[1]:
+        orders_delta = percent_delta(current_orders, previous_orders)
         render_kpi_card(
             "Pesanan",
             format_integer(current_orders),
-            percent_delta(current_orders, previous_orders),
             COLORS["cyan"],
+            delta=orders_delta,
+            note=None if orders_delta else "Belum ada periode pembanding",
+            spark=orders_spark,
+            key="orders",
         )
     with metric_columns[2]:
+        customers_delta = percent_delta(current_customers, previous_customers)
         render_kpi_card(
             "Customer unik",
             format_integer(current_customers),
-            percent_delta(current_customers, previous_customers),
             COLORS["violet"],
+            delta=customers_delta,
+            note=None if customers_delta else "Belum ada periode pembanding",
+            spark=customers_spark,
+            key="customers",
         )
     with metric_columns[3]:
+        aov_delta = percent_delta(current_aov, previous_aov)
         render_kpi_card(
             "Average order value",
             format_currency(current_aov),
-            percent_delta(current_aov, previous_aov),
             COLORS["emerald"],
+            delta=aov_delta,
+            note=None if aov_delta else "Belum ada periode pembanding",
+            spark=aov_spark,
+            key="aov",
         )
     with metric_columns[4]:
         rating_text = f"{current_rating:.2f} / 5" if np.isfinite(current_rating) else "N/A"
@@ -885,8 +1291,10 @@ def main() -> None:
         render_kpi_card(
             "Rating rata-rata",
             rating_text,
-            f"Cakupan ulasan {reviewed_share:.1f}% pesanan",
             COLORS["amber"],
+            note=f"Cakupan ulasan {reviewed_share:.1f}% pesanan",
+            spark=rating_spark,
+            key="rating",
         )
 
     tabs = st.tabs(["Ringkasan", "Customer & Peta", "Produk & Seller", "Layanan & Pembayaran"])
@@ -898,8 +1306,8 @@ def main() -> None:
         delivered = order_view.dropna(subset=["is_on_time"])
         on_time_rate = delivered["is_on_time"].mean() * 100 if not delivered.empty else np.nan
         insight = (
-            f"Kategori dengan GMV tertinggi adalah {top_category}, sedangkan customer dari {top_state} "
-            f"memberikan kontribusi wilayah terbesar. "
+            f"Kategori dengan GMV tertinggi adalah {top_category}, sedangkan customer dari "
+            f"{format_state_name(top_state)} memberikan kontribusi wilayah terbesar. "
             + (f"Sebanyak {on_time_rate:.1f}% pesanan terkirim tepat waktu." if np.isfinite(on_time_rate) else "Data ketepatan waktu belum tersedia pada filter ini.")
         )
         st.markdown(f'<div class="insight-box"><b>Insight otomatis:</b> {html.escape(insight)}</div>', unsafe_allow_html=True)
@@ -932,7 +1340,7 @@ def main() -> None:
             status_summary = order_view["order_status"].value_counts().rename_axis("Status").reset_index(name="Pesanan")
             fig = px.pie(status_summary, names="Status", values="Pesanan", hole=.67, color_discrete_sequence=[COLORS["blue"], COLORS["cyan"], COLORS["violet"], COLORS["amber"], COLORS["rose"], COLORS["emerald"]])
             fig.update_traces(textposition="outside", textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>%{value:,.0f} pesanan<br>%{percent}<extra></extra>")
-            fig.add_annotation(text=f"<b>{format_integer(current_orders)}</b><br><span style='font-size:11px'>pesanan</span>", x=.5, y=.5, showarrow=False, font=dict(color=COLORS["navy"], size=18))
+            fig.add_annotation(text=f"<b>{format_integer(current_orders)}</b><br><span style='font-size:11px'>pesanan</span>", x=.5, y=.5, showarrow=False, font=dict(color=COLORS["text"], size=18))
             st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
 
         left, right = st.columns(2, gap="large")
@@ -945,11 +1353,35 @@ def main() -> None:
             st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
         with right:
             section_heading("Kontribusi state customer", "Sepuluh state dengan GMV tertinggi.")
-            state_revenue = filtered.groupby("customer_state", as_index=False).agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique")).nlargest(10, "GMV")
-            fig = px.bar(state_revenue, x="customer_state", y="GMV", color="Pesanan", color_continuous_scale=["#67E8F9", "#0891B2"], labels={"customer_state": "State", "GMV": "GMV (R$)"})
-            fig.update_layout(coloraxis_colorbar=dict(title="Pesanan"))
-            fig.update_traces(hovertemplate="State %{x}<br>GMV R$ %{y:,.2f}<br>Pesanan %{marker.color:,.0f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            state_revenue = (
+                filtered.groupby("customer_state", as_index=False)
+                .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"))
+                .nlargest(10, "GMV")
+            )
+            state_revenue["State"] = state_revenue["customer_state"].map(format_state_name)
+            state_revenue = state_revenue.sort_values("GMV")
+            fig = px.bar(
+                state_revenue,
+                x="GMV",
+                y="State",
+                orientation="h",
+                color="Pesanan",
+                color_continuous_scale=["#67E8F9", "#0891B2"],
+                labels={"State": "", "GMV": "GMV (R$)"},
+            )
+            fig.update_layout(
+                coloraxis_colorbar=dict(title="Pesanan"),
+                margin=dict(l=145, r=65, t=38, b=35),
+            )
+            fig.update_yaxes(automargin=True)
+            fig.update_traces(
+                customdata=state_revenue[["customer_state", "Pesanan"]],
+                hovertemplate=(
+                    "<b>%{y}</b><br>Kode: %{customdata[0]}<br>"
+                    "GMV R$ %{x:,.2f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>"
+                ),
+            )
+            st.plotly_chart(style_figure(fig, 430), use_container_width=True, config={"displayModeBar": False})
 
     # ----------------------------------------------------------- Customer dan Peta
     with tabs[1]:
@@ -996,8 +1428,19 @@ def main() -> None:
             )
             state_profile["AOV"] = state_profile["GMV"] / state_profile["Pesanan"]
             display_state = state_profile.copy()
+            display_state.insert(
+                0,
+                "State",
+                display_state["customer_state"].map(
+                    lambda code: format_state_name(code, include_code=False)
+                ),
+            )
+            display_state = display_state.rename(columns={"customer_state": "Kode"})
             display_state["GMV"] = display_state["GMV"].map(format_currency)
             display_state["AOV"] = display_state["AOV"].map(format_currency)
+            display_state = display_state[
+                ["State", "Kode", "GMV", "Pesanan", "Customer", "AOV"]
+            ]
             st.dataframe(display_state, use_container_width=True, hide_index=True, height=380)
         with right:
             section_heading("Retensi customer", "Segmentasi berdasarkan seluruh riwayat customer, bukan hanya periode filter.")
@@ -1007,9 +1450,56 @@ def main() -> None:
                 .rename_axis("Segmen")
                 .reset_index(name="Customer")
             )
-            fig = px.pie(customer_segments, names="Segmen", values="Customer", hole=.62, color="Segmen", color_discrete_map={"One-time customer": COLORS["blue"], "Repeat customer": COLORS["emerald"]})
-            fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>%{value:,.0f} customer<br>%{percent}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 370), use_container_width=True, config={"displayModeBar": False})
+            total_segment_customers = int(customer_segments["Customer"].sum())
+            customer_segments["Persentase"] = (
+                customer_segments["Customer"] / max(total_segment_customers, 1) * 100
+            )
+            customer_segments["Legenda"] = customer_segments.apply(
+                lambda row: f"{row['Segmen']} · {row['Persentase']:.1f}%",
+                axis=1,
+            )
+            fig = px.pie(
+                customer_segments,
+                names="Legenda",
+                values="Customer",
+                hole=.64,
+                color="Segmen",
+                color_discrete_map={
+                    "One-time customer": COLORS["blue"],
+                    "Repeat customer": COLORS["emerald"],
+                },
+            )
+            fig.update_traces(
+                textinfo="none",
+                marker=dict(line=dict(color=COLORS["surface"], width=3)),
+                hovertemplate=(
+                    "<b>%{label}</b><br>%{value:,.0f} customer"
+                    "<br>%{percent}<extra></extra>"
+                ),
+            )
+            fig.add_annotation(
+                text=(
+                    f"<b>{format_integer(total_segment_customers)}</b><br>"
+                    "<span style='font-size:11px'>customer unik</span>"
+                ),
+                x=.5,
+                y=.5,
+                showarrow=False,
+                font=dict(color=COLORS["text"], size=18),
+            )
+            fig = style_figure(fig, 395)
+            fig.update_layout(
+                legend=dict(
+                    orientation="h",
+                    yanchor="top",
+                    y=-.04,
+                    xanchor="center",
+                    x=.5,
+                    font=dict(color=COLORS["text"], size=11),
+                ),
+                margin=dict(l=20, r=20, t=25, b=75),
+            )
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
     # -------------------------------------------------------------- Produk/Seller
     with tabs[2]:
@@ -1034,28 +1524,93 @@ def main() -> None:
 
         left, right = st.columns(2, gap="large")
         with left:
-            section_heading("Produk terlaris", "Produk diperingkat berdasarkan total GMV pada hasil filter.")
+            section_heading(
+                "Produk terlaris",
+                "Dataset publik Olist tidak menyediakan nama produk; label menggunakan kategori dan ID singkat.",
+            )
             product_profile = (
                 filtered.groupby(["product_id", "category"], as_index=False)
-                .agg(GMV=("gmv", "sum"), Unit=("order_item_id", "count"), Rating=("review_score", "mean"))
+                .agg(
+                    GMV=("gmv", "sum"),
+                    Unit=("order_item_id", "count"),
+                    Rating=("review_score", "mean"),
+                )
                 .nlargest(12, "GMV")
                 .sort_values("GMV")
             )
-            product_profile["Produk"] = product_profile["product_id"].str[:8] + "…"
-            fig = px.bar(product_profile, x="GMV", y="Produk", orientation="h", color="category", labels={"GMV": "GMV (R$)"})
-            fig.update_layout(showlegend=False)
-            fig.update_traces(customdata=product_profile[["category", "Unit", "Rating"]], hovertemplate="Produk %{y}<br>%{customdata[0]}<br>GMV R$ %{x:,.2f}<br>Unit %{customdata[1]:,.0f}<br>Rating %{customdata[2]:.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 440), use_container_width=True, config={"displayModeBar": False})
+            product_profile["Produk"] = product_profile.apply(
+                lambda row: (
+                    f"{shorten_label(row['category'], 23)} · "
+                    f"{str(row['product_id'])[:6].upper()}"
+                ),
+                axis=1,
+            )
+            fig = px.bar(
+                product_profile,
+                x="GMV",
+                y="Produk",
+                orientation="h",
+                color="GMV",
+                color_continuous_scale=["#1D4ED8", COLORS["blue"], COLORS["violet"]],
+                labels={"GMV": "GMV (R$)", "Produk": ""},
+            )
+            fig.update_layout(
+                coloraxis_showscale=False,
+                margin=dict(l=175, r=25, t=38, b=35),
+            )
+            fig.update_yaxes(automargin=True)
+            fig.update_traces(
+                customdata=product_profile[
+                    ["product_id", "category", "Unit", "Rating"]
+                ],
+                hovertemplate=(
+                    "<b>%{y}</b><br>Kategori: %{customdata[1]}"
+                    "<br>ID produk: %{customdata[0]}"
+                    "<br>GMV R$ %{x:,.2f}"
+                    "<br>Unit %{customdata[2]:,.0f}"
+                    "<br>Rating %{customdata[3]:.2f}<extra></extra>"
+                ),
+            )
+            st.plotly_chart(
+                style_figure(fig, 480),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
         with right:
             section_heading("Kekuatan seller per state", "Perbandingan seller aktif, GMV, dan jumlah pesanan.")
             seller_profile = (
                 filtered.groupby("seller_state", as_index=False)
-                .agg(GMV=("gmv", "sum"), Seller=("seller_id", "nunique"), Pesanan=("order_id", "nunique"))
+                .agg(
+                    GMV=("gmv", "sum"),
+                    Seller=("seller_id", "nunique"),
+                    Pesanan=("order_id", "nunique"),
+                )
                 .nlargest(12, "GMV")
             )
-            fig = px.bar(seller_profile, x="seller_state", y="GMV", color="Seller", color_continuous_scale=["#C4B5FD", "#6D28D9"], labels={"seller_state": "State seller", "GMV": "GMV (R$)"})
-            fig.update_traces(customdata=seller_profile[["Seller", "Pesanan"]], hovertemplate="State %{x}<br>GMV R$ %{y:,.2f}<br>Seller %{customdata[0]:,.0f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 440), use_container_width=True, config={"displayModeBar": False})
+            seller_profile["State"] = seller_profile["seller_state"].map(format_state_name)
+            fig = px.bar(
+                seller_profile,
+                x="State",
+                y="GMV",
+                color="Seller",
+                color_continuous_scale=["#C4B5FD", "#6D28D9"],
+                labels={"State": "State seller", "GMV": "GMV (R$)"},
+            )
+            fig.update_xaxes(tickangle=-32, automargin=True)
+            fig.update_traces(
+                customdata=seller_profile[["seller_state", "Seller", "Pesanan"]],
+                hovertemplate=(
+                    "<b>%{x}</b><br>Kode: %{customdata[0]}"
+                    "<br>GMV R$ %{y:,.2f}"
+                    "<br>Seller %{customdata[1]:,.0f}"
+                    "<br>Pesanan %{customdata[2]:,.0f}<extra></extra>"
+                ),
+            )
+            st.plotly_chart(
+                style_figure(fig, 460),
+                use_container_width=True,
+                config={"displayModeBar": False},
+            )
 
     # ---------------------------------------------------- Layanan dan pembayaran
     with tabs[3]:
@@ -1067,12 +1622,56 @@ def main() -> None:
         average_delivery = delivered_orders["delivery_days"].mean()
         late_rate = (delivered_orders["delivery_delay_days"] > 0).mean() * 100 if not delivered_orders.empty else np.nan
         negative_review = (reviewed["review_score"] <= 2).mean() * 100 if not reviewed.empty else np.nan
+
+        if span_days > 180:
+            service_period = order_view["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
+        elif span_days > 60:
+            service_period = order_view["order_purchase_timestamp"].dt.to_period("W").dt.start_time
+        else:
+            service_period = order_view["order_purchase_timestamp"].dt.normalize()
+
+        service_trend = (
+            order_view.assign(_service_period=service_period)
+            .groupby("_service_period", as_index=False)
+            .agg(
+                AverageDelivery=("delivery_days", "mean"),
+                LateRate=("delivery_delay_days", lambda values: (values > 0).mean() * 100),
+                NegativeReview=("review_score", lambda values: (values <= 2).mean() * 100),
+            )
+            .sort_values("_service_period")
+        )
+
+        delivery_spark = service_trend["AverageDelivery"].tail(spark_limit).tolist()
+        late_spark = service_trend["LateRate"].tail(spark_limit).tolist()
+        negative_spark = service_trend["NegativeReview"].tail(spark_limit).tolist()
+
         with left:
-            render_kpi_card("Waktu kirim rata-rata", f"{average_delivery:.1f} hari" if np.isfinite(average_delivery) else "N/A", "Dari pembelian hingga diterima", COLORS["cyan"])
+            render_kpi_card(
+                "Waktu kirim rata-rata",
+                f"{average_delivery:.1f} hari" if np.isfinite(average_delivery) else "N/A",
+                COLORS["cyan"],
+                note="Dari pembelian hingga diterima",
+                spark=delivery_spark,
+                key="delivery",
+            )
         with middle:
-            render_kpi_card("Keterlambatan", f"{late_rate:.1f}%" if np.isfinite(late_rate) else "N/A", "Diterima setelah estimasi", COLORS["rose"])
+            render_kpi_card(
+                "Keterlambatan",
+                f"{late_rate:.1f}%" if np.isfinite(late_rate) else "N/A",
+                COLORS["rose"],
+                note="Diterima setelah estimasi",
+                spark=late_spark,
+                key="late",
+            )
         with right:
-            render_kpi_card("Ulasan negatif", f"{negative_review:.1f}%" if np.isfinite(negative_review) else "N/A", "Rating 1 atau 2", COLORS["amber"])
+            render_kpi_card(
+                "Ulasan negatif",
+                f"{negative_review:.1f}%" if np.isfinite(negative_review) else "N/A",
+                COLORS["amber"],
+                note="Rating 1 atau 2",
+                spark=negative_spark,
+                key="negative_review",
+            )
 
         left, right = st.columns(2, gap="large")
         with left:
