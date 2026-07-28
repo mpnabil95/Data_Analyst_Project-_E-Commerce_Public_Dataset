@@ -13,13 +13,14 @@
       "settings": {},
       "extensions": [
         "ms-python.python",
-        "ms-python.vscode-pylance"
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter"
       ]
     }
   },
-  "updateContentCommand": "[ -f packages.txt ] && sudo apt update && sudo xargs apt install -y < packages.txt; [ -f requirements.txt ] && pip3 install --user -r requirements.txt; echo '✅ Packages installed and requirements met'",
+  "updateContentCommand": "python -m pip install --user -r requirements-dev.txt",
   "postAttachCommand": {
-    "server": "streamlit run app.py"
+    "server": "python -m streamlit run app.py"
   },
   "portsAttributes": {
     "8501": {
