@@ -2,7 +2,7 @@
 
 Jalankan aplikasi dari folder yang berisi file ini dengan perintah:
 
-    streamlit run app_2_v15.py
+    streamlit run app.py
 
 Dependensi utama:
 
@@ -49,7 +49,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Dashboard v14 menggunakan satu design system: dark mode.
+# Versi rilis menggunakan satu design system yang konsisten: dark mode.
 DARK_MODE = True
 
 COLORS = {
@@ -1070,7 +1070,7 @@ def main() -> None:
         for name in missing:
             st.write(f"- `{name}`")
         st.info(
-            "Letakkan file di folder yang sama dengan app_2.py, folder data/, "
+            "Letakkan file di folder yang sama dengan app.py, folder data/, "
             "folder project_sources/, atau unggah melalui sidebar."
         )
         st.stop()

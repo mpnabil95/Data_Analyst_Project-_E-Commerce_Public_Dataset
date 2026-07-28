@@ -1,9 +1,9 @@
-# Riwayat Pengembangan Dashboard `app_2.py`
+# Riwayat Pengembangan Dashboard `app.py`
 
 > Dokumentasi perubahan `app_2_v1.py` hingga `app_2_v15.py`  
 > Proyek: **FP-E-Commerce — Olist Commerce Intelligence**  
 > Framework: **Streamlit, Pandas, Plotly, Folium, dan Streamlit-Folium**  
-> Versi final yang direkomendasikan: **`app_2_v15.py`**
+> Entry point rilis v2.0.0: **`app.py`**, hasil promosi dari `app_2_v15.py`
 
 ---
 
@@ -894,7 +894,9 @@ Nama lengkap state juga digunakan pada sumbu chart. Beberapa penyesuaian layout 
 
 ### Status
 
-`app_2_v15.py` merupakan versi final yang direkomendasikan sebagai source utama deployment dan portfolio GitHub.
+`app_2_v15.py` menjadi baseline final seri revisi. Pada finalisasi v2.0.0,
+baseline tersebut dipromosikan menjadi `app.py` sebagai source utama deployment
+dan portfolio GitHub.
 
 ---
 
@@ -1167,9 +1169,9 @@ Pengembangan `app_2.py` dari `v1` hingga `v15` dapat dibagi menjadi lima fase ut
 4. **konsolidasi dark-only (`v14`)** — menyatukan seluruh dashboard dalam design system gelap yang konsisten;
 5. **final UI polish (`v15`)** — memperjelas navigasi, menerjemahkan kode state menjadi nama yang mudah dipahami, memberi konteks pada produk, dan menghilangkan tabrakan teks pada retensi customer.
 
-Versi final mempertahankan kemampuan analitik dashboard awal, tetapi meningkatkan portabilitas, stabilitas rendering, keterbacaan, responsivitas, interpretabilitas, dan kualitas visual secara signifikan. Untuk penggunaan produksi dan portfolio GitHub, `app_2_v15.py` merupakan baseline yang direkomendasikan.
+Versi final mempertahankan kemampuan analitik dashboard awal, tetapi meningkatkan portabilitas, stabilitas rendering, keterbacaan, responsivitas, interpretabilitas, dan kualitas visual secara signifikan. `app_2_v15.py` tetap dicatat sebagai baseline historis terakhir, sedangkan `app.py` menjadi entry point resmi untuk penggunaan produksi dan portfolio GitHub pada v2.0.0.
 
 ---
 
 **Dokumen terakhir diperbarui:** 19 Juli 2026  
-**Status:** Final documentation updated through `app_2_v15.py`
+**Status:** Final documentation updated through `app_2_v15.py`; promoted to `app.py` for v2.0.0
