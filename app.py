@@ -538,6 +538,24 @@ REQUIRED_FILES = {
     "orders": "orders_dataset.csv",
 }
 
+# Ambang minimum mengikuti notebook analisis. Tujuannya menangkap CSV yang
+# terpotong atau masih berupa pointer Git LFS, bukan membatasi baris analisis.
+EXPECTED_MIN_ROWS = {
+    "customers": 99_000,
+    "sellers": 3_000,
+    "payments": 103_000,
+    "translation": 70,
+    "products": 32_000,
+    "geolocation": 1_000_000,
+    "reviews": 99_000,
+    "items": 112_000,
+    "orders": 99_000,
+}
+
+# Bounding box konservatif Brasil, selaras dengan pemeriksaan spasial notebook.
+BRAZIL_LATITUDE_BOUNDS = (-34.0, 6.0)
+BRAZIL_LONGITUDE_BOUNDS = (-74.0, -34.0)
+
 
 def normalize_filename(name: str) -> str:
     """Menghapus prefiks angka agar file ``01-...`` tetap dikenali."""
@@ -645,6 +663,19 @@ def validate_columns(datasets: dict[str, pd.DataFrame]) -> list[str]:
     return errors
 
 
+def validate_dataset_completeness(datasets: dict[str, pd.DataFrame]) -> list[str]:
+    """Mendeteksi CSV yang terlalu kecil dan kemungkinan terpotong."""
+    errors: list[str] = []
+    for key, minimum_rows in EXPECTED_MIN_ROWS.items():
+        actual_rows = len(datasets[key])
+        if actual_rows < minimum_rows:
+            errors.append(
+                f"{REQUIRED_FILES[key]}: {actual_rows:,} baris "
+                f"(minimum yang diharapkan {minimum_rows:,})"
+            )
+    return errors
+
+
 # -----------------------------------------------------------------------------
 # Pembuatan data mart
 # -----------------------------------------------------------------------------
@@ -656,10 +687,18 @@ def build_data_model(
     del fingerprint
     data = {name: frame.copy() for name, frame in _datasets.items()}
 
-    # Satu kode pos memiliki banyak titik; median mengurangi pengaruh outlier.
+    # Bersihkan duplikasi dan koordinat non-Brasil sebelum mengambil median.
     geo = data["geolocation"].dropna(
         subset=["geolocation_zip_code_prefix", "geolocation_lat", "geolocation_lng"]
+    ).drop_duplicates()
+    geo["geolocation_lat"] = pd.to_numeric(geo["geolocation_lat"], errors="coerce")
+    geo["geolocation_lng"] = pd.to_numeric(geo["geolocation_lng"], errors="coerce")
+    geo = geo.dropna(subset=["geolocation_lat", "geolocation_lng"])
+    valid_geo = (
+        geo["geolocation_lat"].between(*BRAZIL_LATITUDE_BOUNDS)
+        & geo["geolocation_lng"].between(*BRAZIL_LONGITUDE_BOUNDS)
     )
+    geo = geo.loc[valid_geo].copy()
     geo_zip = (
         geo.groupby("geolocation_zip_code_prefix", as_index=False)
         .agg(customer_lat=("geolocation_lat", "median"), customer_lng=("geolocation_lng", "median"))
@@ -706,13 +745,22 @@ def build_data_model(
     orders = orders.merge(review_order, on="order_id", how="left", validate="one_to_one")
 
     lifetime = (
-        orders.groupby("customer_unique_id")["order_id"]
+        orders.loc[orders["order_status"].eq("delivered")]
+        .groupby("customer_unique_id")["order_id"]
         .nunique()
-        .rename("customer_lifetime_orders")
+        .rename("customer_lifetime_delivered_orders")
     )
     orders = orders.merge(lifetime, on="customer_unique_id", how="left")
-    orders["customer_segment"] = np.where(
-        orders["customer_lifetime_orders"].gt(1), "Repeat customer", "One-time customer"
+    orders["customer_lifetime_delivered_orders"] = (
+        orders["customer_lifetime_delivered_orders"].fillna(0).astype(int)
+    )
+    orders["customer_segment"] = np.select(
+        [
+            orders["customer_lifetime_delivered_orders"].gt(1),
+            orders["customer_lifetime_delivered_orders"].eq(1),
+        ],
+        ["Repeat customer", "One-time customer"],
+        default="Belum ada pesanan selesai",
     )
 
     products = data["products"].merge(
@@ -739,7 +787,8 @@ def build_data_model(
     fact["seller_state"] = fact["seller_state"].fillna("Unknown")
     fact["price"] = pd.to_numeric(fact["price"], errors="coerce").fillna(0)
     fact["freight_value"] = pd.to_numeric(fact["freight_value"], errors="coerce").fillna(0)
-    fact["gmv"] = fact["price"] + fact["freight_value"]
+    fact["gmv"] = fact["price"]
+    fact["order_value"] = fact["price"] + fact["freight_value"]
 
     payments = data["payments"].copy()
     payments["payment_value"] = pd.to_numeric(payments["payment_value"], errors="coerce").fillna(0)
@@ -749,10 +798,13 @@ def build_data_model(
 
     quality_rows = []
     for name, frame in data.items():
+        used_rows = len(geo) if name == "geolocation" else len(frame)
         quality_rows.append(
             {
                 "Dataset": REQUIRED_FILES[name],
                 "Baris": len(frame),
+                "Baris digunakan": used_rows,
+                "Baris dikeluarkan": len(frame) - used_rows,
                 "Kolom": len(frame.columns),
                 "Sel kosong": int(frame.isna().sum().sum()),
                 "Baris duplikat": int(frame.duplicated().sum()),
@@ -855,7 +907,7 @@ def render_kpi_card(
             )
             st.plotly_chart(
                 fig,
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False, "staticPlot": True},
                 key=f"spark_{key}",
             )
@@ -987,7 +1039,7 @@ def make_customer_map(points: pd.DataFrame, mode: str) -> folium.Map:
                 f"{html.escape(format_state_name(row.customer_state))}</b><br>"
                 f"Customer: {format_integer(row.customers)}<br>"
                 f"Pesanan: {format_integer(row.orders)}<br>"
-                f"GMV: {format_currency(row.gmv)}"
+                f"Product GMV: {format_currency(row.gmv)}"
             )
             folium.CircleMarker(
                 location=[row.customer_lat, row.customer_lng],
@@ -1031,9 +1083,9 @@ def create_order_export(filtered: pd.DataFrame) -> bytes:
         filtered.groupby(dimensions, dropna=False, as_index=False)
         .agg(
             item_count=("order_item_id", "count"),
-            product_revenue=("price", "sum"),
+            product_gmv=("gmv", "sum"),
             freight_value=("freight_value", "sum"),
-            gmv=("gmv", "sum"),
+            order_value=("order_value", "sum"),
             categories=("category", lambda values: " | ".join(sorted(set(values)))),
         )
         .sort_values("order_purchase_timestamp", ascending=False)
@@ -1080,6 +1132,17 @@ def main() -> None:
         st.error("Terdapat kolom wajib yang tidak ditemukan:")
         for error in column_errors:
             st.write(f"- {error}")
+        st.stop()
+
+    completeness_errors = validate_dataset_completeness(datasets)
+    if completeness_errors:
+        st.error("Terdapat dataset yang tampaknya tidak lengkap atau terpotong:")
+        for error in completeness_errors:
+            st.write(f"- {error}")
+        st.info(
+            "Pastikan Git LFS sudah selesai (`git lfs pull`) atau unggah ulang "
+            "CSV Olist yang lengkap sebelum menjalankan dashboard."
+        )
         st.stop()
 
     model = build_data_model(fingerprint, datasets)
@@ -1169,13 +1232,15 @@ def main() -> None:
     previous_orders = previous["order_id"].nunique()
 
     current_revenue = float(filtered["gmv"].sum())
+    current_order_value = float(filtered["order_value"].sum())
     current_orders = int(filtered["order_id"].nunique())
     current_customers = int(filtered["customer_unique_id"].nunique())
-    current_aov = current_revenue / current_orders if current_orders else 0
+    current_aov = current_order_value / current_orders if current_orders else 0
     current_rating = float(order_view["review_score"].mean())
     previous_revenue = float(previous["gmv"].sum())
+    previous_order_value = float(previous["order_value"].sum())
     previous_customers = int(previous["customer_unique_id"].nunique()) if not previous.empty else 0
-    previous_aov = previous_revenue / previous_orders if previous_orders else np.nan
+    previous_aov = previous_order_value / previous_orders if previous_orders else np.nan
 
     # Trend ringkas untuk sparkline KPI.
     if span_days > 180:
@@ -1190,13 +1255,14 @@ def main() -> None:
         .groupby("_kpi_period", as_index=False)
         .agg(
             GMV=("gmv", "sum"),
+            OrderValue=("order_value", "sum"),
             Pesanan=("order_id", "nunique"),
             Customer=("customer_unique_id", "nunique"),
         )
         .sort_values("_kpi_period")
     )
     kpi_trend["AOV"] = (
-        kpi_trend["GMV"]
+        kpi_trend["OrderValue"]
         / kpi_trend["Pesanan"].replace(0, np.nan)
     )
 
@@ -1248,7 +1314,7 @@ def main() -> None:
             format_currency(current_revenue),
             COLORS["blue"],
             delta=gmv_delta,
-            note=None if gmv_delta else "Belum ada periode pembanding",
+            note="Nilai produk, tidak termasuk freight",
             spark=gmv_spark,
             key="gmv",
         )
@@ -1281,7 +1347,7 @@ def main() -> None:
             format_currency(current_aov),
             COLORS["emerald"],
             delta=aov_delta,
-            note=None if aov_delta else "Belum ada periode pembanding",
+            note="Harga produk + freight per pesanan",
             spark=aov_spark,
             key="aov",
         )
@@ -1314,7 +1380,10 @@ def main() -> None:
 
         left, right = st.columns([1.65, 1], gap="large")
         with left:
-            section_heading("Tren GMV dan pesanan", "Granularitas menyesuaikan panjang periode yang dipilih.")
+            section_heading(
+                "Tren product GMV dan pesanan",
+                "GMV hanya mencakup harga produk; granularitas mengikuti periode.",
+            )
             if span_days > 180:
                 period = filtered["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
                 period_label = "Bulan"
@@ -1330,10 +1399,10 @@ def main() -> None:
                 .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"))
             )
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=trend["period"], y=trend["GMV"], name="GMV", mode="lines", line=dict(color=COLORS["blue"], width=3), fill="tozeroy", fillcolor="rgba(37,99,235,0.16)", hovertemplate="%{x|%d %b %Y}<br>GMV R$ %{y:,.2f}<extra></extra>"))
+            fig.add_trace(go.Scatter(x=trend["period"], y=trend["GMV"], name="Product GMV", mode="lines", line=dict(color=COLORS["blue"], width=3), fill="tozeroy", fillcolor="rgba(37,99,235,0.16)", hovertemplate="%{x|%d %b %Y}<br>Product GMV R$ %{y:,.2f}<extra></extra>"))
             fig.add_trace(go.Scatter(x=trend["period"], y=trend["Pesanan"], name="Pesanan", mode="lines+markers", yaxis="y2", line=dict(color=COLORS["cyan"], width=2), marker=dict(size=5), hovertemplate="%{x|%d %b %Y}<br>%{y:,.0f} pesanan<extra></extra>"))
-            fig.update_layout(yaxis=dict(title="GMV (R$)"), yaxis2=dict(title="Pesanan", overlaying="y", side="right", showgrid=False), xaxis_title=period_label)
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            fig.update_layout(yaxis=dict(title="Product GMV (R$)"), yaxis2=dict(title="Pesanan", overlaying="y", side="right", showgrid=False), xaxis_title=period_label)
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         with right:
             section_heading("Komposisi status", "Jumlah pesanan unik menurut status terakhir.")
@@ -1341,18 +1410,21 @@ def main() -> None:
             fig = px.pie(status_summary, names="Status", values="Pesanan", hole=.67, color_discrete_sequence=[COLORS["blue"], COLORS["cyan"], COLORS["violet"], COLORS["amber"], COLORS["rose"], COLORS["emerald"]])
             fig.update_traces(textposition="outside", textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>%{value:,.0f} pesanan<br>%{percent}<extra></extra>")
             fig.add_annotation(text=f"<b>{format_integer(current_orders)}</b><br><span style='font-size:11px'>pesanan</span>", x=.5, y=.5, showarrow=False, font=dict(color=COLORS["text"], size=18))
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         left, right = st.columns(2, gap="large")
         with left:
-            section_heading("Kategori penyumbang GMV", "Sepuluh kategori dengan nilai produk dan freight tertinggi.")
+            section_heading(
+                "Kategori penyumbang product GMV",
+                "Sepuluh kategori dengan total harga produk tertinggi; freight tidak disertakan.",
+            )
             category_revenue = filtered.groupby("category", as_index=False)["gmv"].sum().nlargest(10, "gmv").sort_values("gmv")
-            fig = px.bar(category_revenue, x="gmv", y="category", orientation="h", color="gmv", color_continuous_scale=["#93C5FD", "#1D4ED8"], labels={"gmv": "GMV (R$)", "category": ""})
+            fig = px.bar(category_revenue, x="gmv", y="category", orientation="h", color="gmv", color_continuous_scale=["#93C5FD", "#1D4ED8"], labels={"gmv": "Product GMV (R$)", "category": ""})
             fig.update_layout(coloraxis_showscale=False)
-            fig.update_traces(hovertemplate="%{y}<br>GMV R$ %{x:,.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            fig.update_traces(hovertemplate="%{y}<br>Product GMV R$ %{x:,.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
         with right:
-            section_heading("Kontribusi state customer", "Sepuluh state dengan GMV tertinggi.")
+            section_heading("Kontribusi state customer", "Sepuluh state dengan product GMV tertinggi.")
             state_revenue = (
                 filtered.groupby("customer_state", as_index=False)
                 .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"))
@@ -1367,7 +1439,7 @@ def main() -> None:
                 orientation="h",
                 color="Pesanan",
                 color_continuous_scale=["#67E8F9", "#0891B2"],
-                labels={"State": "", "GMV": "GMV (R$)"},
+                labels={"State": "", "GMV": "Product GMV (R$)"},
             )
             fig.update_layout(
                 coloraxis_colorbar=dict(title="Pesanan"),
@@ -1378,10 +1450,10 @@ def main() -> None:
                 customdata=state_revenue[["customer_state", "Pesanan"]],
                 hovertemplate=(
                     "<b>%{y}</b><br>Kode: %{customdata[0]}<br>"
-                    "GMV R$ %{x:,.2f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>"
+                    "Product GMV R$ %{x:,.2f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>"
                 ),
             )
-            st.plotly_chart(style_figure(fig, 430), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 430), width="stretch", config={"displayModeBar": False})
 
     # ----------------------------------------------------------- Customer dan Peta
     with tabs[1]:
@@ -1420,13 +1492,18 @@ def main() -> None:
 
         left, right = st.columns([1.25, 1], gap="large")
         with left:
-            section_heading("Profil wilayah", "GMV, pesanan, dan customer unik pada setiap state.")
+            section_heading("Profil wilayah", "Product GMV, pesanan, dan customer unik pada setiap state.")
             state_profile = (
                 filtered.groupby("customer_state", as_index=False)
-                .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"), Customer=("customer_unique_id", "nunique"))
+                .agg(
+                    GMV=("gmv", "sum"),
+                    NilaiPesanan=("order_value", "sum"),
+                    Pesanan=("order_id", "nunique"),
+                    Customer=("customer_unique_id", "nunique"),
+                )
                 .sort_values("GMV", ascending=False)
             )
-            state_profile["AOV"] = state_profile["GMV"] / state_profile["Pesanan"]
+            state_profile["AOV"] = state_profile["NilaiPesanan"] / state_profile["Pesanan"]
             display_state = state_profile.copy()
             display_state.insert(
                 0,
@@ -1441,9 +1518,12 @@ def main() -> None:
             display_state = display_state[
                 ["State", "Kode", "GMV", "Pesanan", "Customer", "AOV"]
             ]
-            st.dataframe(display_state, use_container_width=True, hide_index=True, height=380)
+            st.dataframe(display_state, width="stretch", hide_index=True, height=380)
         with right:
-            section_heading("Retensi customer", "Segmentasi berdasarkan seluruh riwayat customer, bukan hanya periode filter.")
+            section_heading(
+                "Frekuensi pembelian customer",
+                "Segmentasi menurut delivered order sepanjang riwayat; bukan cohort retention.",
+            )
             customer_segments = (
                 order_view.drop_duplicates("customer_unique_id")["customer_segment"]
                 .value_counts()
@@ -1467,6 +1547,7 @@ def main() -> None:
                 color_discrete_map={
                     "One-time customer": COLORS["blue"],
                     "Repeat customer": COLORS["emerald"],
+                    "Belum ada pesanan selesai": COLORS["muted"],
                 },
             )
             fig.update_traces(
@@ -1499,28 +1580,39 @@ def main() -> None:
                 ),
                 margin=dict(l=20, r=20, t=25, b=75),
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
 
     # -------------------------------------------------------------- Produk/Seller
     with tabs[2]:
+        category_rating = (
+            filtered.drop_duplicates(["order_id", "category"])
+            .groupby("category", as_index=False)
+            .agg(Rating=("review_score", "mean"))
+        )
         category_profile = (
             filtered.groupby("category", as_index=False)
-            .agg(GMV=("gmv", "sum"), Unit=("order_item_id", "count"), Pesanan=("order_id", "nunique"), Customer=("customer_unique_id", "nunique"), Rating=("review_score", "mean"))
+            .agg(
+                GMV=("gmv", "sum"),
+                Unit=("order_item_id", "count"),
+                Pesanan=("order_id", "nunique"),
+                Customer=("customer_unique_id", "nunique"),
+            )
+            .merge(category_rating, on="category", how="left", validate="one_to_one")
         )
         category_profile["GMV per Unit"] = category_profile["GMV"] / category_profile["Unit"]
 
         left, right = st.columns([1.35, 1], gap="large")
         with left:
             section_heading("Matriks portofolio kategori", "Ukuran bubble menunjukkan jumlah pesanan; warna menunjukkan rating.")
-            fig = px.scatter(category_profile, x="Unit", y="GMV", size="Pesanan", color="Rating", hover_name="category", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]], size_max=52, labels={"Unit": "Unit terjual", "GMV": "GMV (R$)"})
-            fig.update_traces(hovertemplate="<b>%{hovertext}</b><br>Unit %{x:,.0f}<br>GMV R$ %{y:,.2f}<br>Rating %{marker.color:.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 450), use_container_width=True, config={"displayModeBar": False})
+            fig = px.scatter(category_profile, x="Unit", y="GMV", size="Pesanan", color="Rating", hover_name="category", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]], size_max=52, labels={"Unit": "Unit terjual", "GMV": "Product GMV (R$)"})
+            fig.update_traces(hovertemplate="<b>%{hovertext}</b><br>Unit %{x:,.0f}<br>Product GMV R$ %{y:,.2f}<br>Rating %{marker.color:.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 450), width="stretch", config={"displayModeBar": False})
         with right:
-            section_heading("Kategori bernilai tinggi", "Peringkat berdasarkan GMV rata-rata per unit.")
+            section_heading("Kategori bernilai tinggi", "Peringkat berdasarkan product GMV rata-rata per unit.")
             high_value = category_profile[category_profile["Unit"].ge(10)].nlargest(12, "GMV per Unit").sort_values("GMV per Unit")
-            fig = px.bar(high_value, x="GMV per Unit", y="category", orientation="h", color="Rating", color_continuous_scale=["#FDE68A", COLORS["emerald"]], labels={"category": "", "GMV per Unit": "GMV per unit (R$)"})
-            fig.update_traces(hovertemplate="%{y}<br>GMV/unit R$ %{x:,.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 450), use_container_width=True, config={"displayModeBar": False})
+            fig = px.bar(high_value, x="GMV per Unit", y="category", orientation="h", color="Rating", color_continuous_scale=["#FDE68A", COLORS["emerald"]], labels={"category": "", "GMV per Unit": "Product GMV per unit (R$)"})
+            fig.update_traces(hovertemplate="%{y}<br>Product GMV/unit R$ %{x:,.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 450), width="stretch", config={"displayModeBar": False})
 
         left, right = st.columns(2, gap="large")
         with left:
@@ -1528,13 +1620,18 @@ def main() -> None:
                 "Produk terlaris",
                 "Dataset publik Olist tidak menyediakan nama produk; label menggunakan kategori dan ID singkat.",
             )
+            product_rating = (
+                filtered.drop_duplicates(["order_id", "product_id"])
+                .groupby("product_id", as_index=False)
+                .agg(Rating=("review_score", "mean"))
+            )
             product_profile = (
                 filtered.groupby(["product_id", "category"], as_index=False)
                 .agg(
                     GMV=("gmv", "sum"),
                     Unit=("order_item_id", "count"),
-                    Rating=("review_score", "mean"),
                 )
+                .merge(product_rating, on="product_id", how="left", validate="many_to_one")
                 .nlargest(12, "GMV")
                 .sort_values("GMV")
             )
@@ -1552,7 +1649,7 @@ def main() -> None:
                 orientation="h",
                 color="GMV",
                 color_continuous_scale=["#1D4ED8", COLORS["blue"], COLORS["violet"]],
-                labels={"GMV": "GMV (R$)", "Produk": ""},
+                labels={"GMV": "Product GMV (R$)", "Produk": ""},
             )
             fig.update_layout(
                 coloraxis_showscale=False,
@@ -1566,18 +1663,18 @@ def main() -> None:
                 hovertemplate=(
                     "<b>%{y}</b><br>Kategori: %{customdata[1]}"
                     "<br>ID produk: %{customdata[0]}"
-                    "<br>GMV R$ %{x:,.2f}"
+                    "<br>Product GMV R$ %{x:,.2f}"
                     "<br>Unit %{customdata[2]:,.0f}"
                     "<br>Rating %{customdata[3]:.2f}<extra></extra>"
                 ),
             )
             st.plotly_chart(
                 style_figure(fig, 480),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False},
             )
         with right:
-            section_heading("Kekuatan seller per state", "Perbandingan seller aktif, GMV, dan jumlah pesanan.")
+            section_heading("Kekuatan seller per state", "Perbandingan seller aktif, product GMV, dan jumlah pesanan.")
             seller_profile = (
                 filtered.groupby("seller_state", as_index=False)
                 .agg(
@@ -1594,21 +1691,21 @@ def main() -> None:
                 y="GMV",
                 color="Seller",
                 color_continuous_scale=["#C4B5FD", "#6D28D9"],
-                labels={"State": "State seller", "GMV": "GMV (R$)"},
+                labels={"State": "State seller", "GMV": "Product GMV (R$)"},
             )
             fig.update_xaxes(tickangle=-32, automargin=True)
             fig.update_traces(
                 customdata=seller_profile[["seller_state", "Seller", "Pesanan"]],
                 hovertemplate=(
                     "<b>%{x}</b><br>Kode: %{customdata[0]}"
-                    "<br>GMV R$ %{y:,.2f}"
+                    "<br>Product GMV R$ %{y:,.2f}"
                     "<br>Seller %{customdata[1]:,.0f}"
                     "<br>Pesanan %{customdata[2]:,.0f}<extra></extra>"
                 ),
             )
             st.plotly_chart(
                 style_figure(fig, 460),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False},
             )
 
@@ -1681,14 +1778,14 @@ def main() -> None:
             fig = px.bar(complete_rating, x="Rating", y="Pesanan", color="Rating", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]])
             fig.update_layout(coloraxis_showscale=False)
             fig.update_traces(hovertemplate="Rating %{x}<br>%{y:,.0f} pesanan<extra></extra>")
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
         with right:
             section_heading("Distribusi waktu pengiriman", "Outlier di atas 90 hari dikeluarkan dari grafik, tetapi tetap masuk KPI.")
             fig = px.histogram(valid_delivery, x="delivery_days", nbins=36, color_discrete_sequence=[COLORS["blue"]], labels={"delivery_days": "Waktu pengiriman (hari)", "count": "Pesanan"})
             if np.isfinite(average_delivery):
                 fig.add_vline(x=average_delivery, line_dash="dash", line_color=COLORS["rose"], annotation_text=f"Rata-rata {average_delivery:.1f} hari", annotation_position="top right")
             fig.update_traces(hovertemplate="Waktu %{x:.1f} hari<br>%{y:,.0f} pesanan<extra></extra>")
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         selected_order_ids = set(order_view["order_id"])
         filtered_payments = payments[payments["order_id"].isin(selected_order_ids)]
@@ -1703,32 +1800,36 @@ def main() -> None:
             fig = px.bar(payment_profile.sort_values("Nilai"), x="Nilai", y="payment_label", orientation="h", color="Nilai", color_continuous_scale=["#60A5FA", "#1E40AF"], labels={"payment_label": "", "Nilai": "Nilai pembayaran (R$)"})
             fig.update_layout(coloraxis_showscale=False)
             fig.update_traces(customdata=payment_profile.sort_values("Nilai")[["Pesanan", "Transaksi"]], hovertemplate="%{y}<br>Nilai R$ %{x:,.2f}<br>Pesanan %{customdata[0]:,.0f}<br>Transaksi %{customdata[1]:,.0f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
         with right:
             section_heading("Porsi metode pembayaran", "Proporsi berdasarkan nilai pembayaran, bukan jumlah transaksi.")
             fig = px.pie(payment_profile, names="payment_label", values="Nilai", hole=.62, color_discrete_sequence=[COLORS["blue"], COLORS["cyan"], COLORS["violet"], COLORS["amber"], COLORS["emerald"]])
             fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>R$ %{value:,.2f}<br>%{percent}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
-        if categories:
-            st.caption("Catatan: ketika kategori produk difilter, nilai pembayaran mencakup seluruh nilai pesanan yang memiliki kategori tersebut.")
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
+        if categories or seller_states:
+            st.caption(
+                "Catatan: filter kategori atau state seller memilih order yang cocok; "
+                "nilai pembayaran tetap mencakup seluruh pembayaran order tersebut."
+            )
 
     st.markdown("---")
     footer_left, footer_middle, footer_right = st.columns([1.6, 1, 1])
     with footer_left:
         st.caption(
             f"Menampilkan {format_integer(len(filtered))} item dari "
-            f"{format_integer(current_orders)} pesanan • GMV = harga produk + freight"
+            f"{format_integer(current_orders)} pesanan • Product GMV = harga produk; "
+            "AOV = (harga produk + freight) / pesanan"
         )
     with footer_middle:
         with st.expander("Kualitas data"):
-            st.dataframe(model["quality"], hide_index=True, use_container_width=True)
+            st.dataframe(model["quality"], hide_index=True, width="stretch")
     with footer_right:
         st.download_button(
             "Unduh hasil filter (.csv)",
             data=create_order_export(filtered),
             file_name=f"olist_filtered_{start_date}_{end_date}.csv",
             mime="text/csv",
-            use_container_width=True,
+            width="stretch",
         )
 
 
