@@ -12,7 +12,7 @@ commit yang berubah setelah tanggal tersebut.
 - Entry point: `app.py`
 - Target Python: 3.11
 - Status saat checklist dibuat: **belum siap dirilis**
-- Checkpoint: Tahap 8 — Dokumentasi dan Lisensi selesai; Tahap 9 belum dimulai
+- Checkpoint: Tahap 9 — README dan Screenshots selesai; Tahap 10 belum dimulai
 
 ## 2. Source control
 
@@ -116,12 +116,12 @@ Expected default regression values:
 - [x] `docs/RELEASE_CHECKLIST.md` tersedia
 - [x] `LICENSE` memisahkan kode asli dari dataset pihak ketiga
 - [x] Changelog menunjuk `app.py` dan mencakup finalisasi Tahap 1–6
-- [ ] README profesional selesai
-- [ ] Screenshot lima bagian dashboard tersedia
-- [ ] Diagram arsitektur data tersedia
-- [ ] KPI definitions dan limitations tertaut dari README
+- [x] README profesional selesai
+- [x] Screenshot lima bagian dashboard tersedia
+- [x] Diagram arsitektur data tersedia
+- [x] KPI definitions dan limitations tertaut dari README
 - [ ] Instruksi instalasi, notebook, dan deployment diuji dari README
-- [ ] Seluruh link internal dan eksternal lolos pemeriksaan
+- [x] Seluruh link internal dan eksternal lolos pemeriksaan
 
 ## 9. Security and repository hygiene
 
@@ -135,12 +135,12 @@ Expected default regression values:
 
 ## 10. Deployment
 
-- [ ] Deployment target telah dipilih
-- [ ] `app.py` digunakan sebagai main file
-- [ ] Git LFS/data availability pada platform target dipastikan
+- [x] Deployment target telah dipilih
+- [x] `app.py` digunakan sebagai main file
+- [x] Git LFS/data availability pada platform target dipastikan
 - [ ] Resource limit diuji pada cold start dan rerun
 - [ ] Dashboard health check berhasil
-- [ ] URL deployment final ditambahkan ke README
+- [x] URL deployment final ditambahkan ke README
 
 ## 11. Final audit
 
