@@ -11,6 +11,14 @@ env/
 # Jupyter
 .ipynb_checkpoints/
 
+# Tests and coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Optional notebook exports
+outputs/
+
 # Streamlit secrets
 .streamlit/secrets.toml
 

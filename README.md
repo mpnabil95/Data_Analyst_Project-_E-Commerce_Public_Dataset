@@ -32,6 +32,7 @@ RFM, serta cohort retention melalui Streamlit.
 - [Menjalankan proyek](#menjalankan-proyek)
 - [Deployment](#deployment-streamlit-community-cloud)
 - [Reproducibility](#reproducibility)
+- [Quality gate](#quality-gate)
 - [Keterbatasan](#keterbatasan)
 - [Dokumentasi](#dokumentasi)
 - [Lisensi dan atribusi](#lisensi-dan-atribusi)
@@ -215,10 +216,18 @@ seluruh 52 kolom sumber tersedia pada
 │   ├── DASHBOARD_CHANGELOG.md
 │   ├── DATA_ATTRIBUTION.md
 │   ├── DATA_DICTIONARY.md
+│   ├── FINAL_AUDIT_REPORT.md
 │   ├── METHODOLOGY.md
 │   └── RELEASE_CHECKLIST.md
+├── tests/
+│   ├── test_data_metrics.py
+│   ├── test_notebook.py
+│   ├── test_repository_integrity.py
+│   └── test_streamlit_app.py
+├── .github/workflows/quality-gate.yml
 ├── .devcontainer/
 ├── .streamlit/
+├── pytest.ini
 ├── requirements.txt
 ├── requirements-notebook.txt
 ├── requirements-dev.txt
@@ -326,8 +335,46 @@ Project candidate telah diverifikasi pada environment bersih Python 3.11:
 - notebook berhasil dieksekusi ulang pada 19/19 code cell;
 - row count dan checksum seluruh sembilan dataset cocok dengan inventaris.
 
-Workflow CI dan regression test otomatis akan ditambahkan pada quality gate
-sebelum rilis final; README ini tidak mengklaim keduanya sudah tersedia.
+Repository menyediakan regression test dan workflow CI untuk mengulang
+pemeriksaan tersebut pada Python 3.11. Bukti audit dan item yang masih perlu
+diverifikasi sebelum merge tersedia pada
+[FINAL_AUDIT_REPORT.md](docs/FINAL_AUDIT_REPORT.md).
+
+## Quality gate
+
+Pasang dependency development sebelum menjalankan pemeriksaan lokal:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m pip check
+```
+
+Jalankan gerbang secara bertahap agar penggunaan memori dashboard dan notebook
+tidak saling bertumpuk:
+
+```bash
+# Data, KPI, RFM/cohort, checksum, dokumentasi, dan hygiene
+python -m pytest -m "not streamlit and not notebook"
+
+# Kelima bagian Streamlit, default filter, empty-state, dan kontrol ekspor
+python -m pytest -m streamlit
+
+# Eksekusi bersih seluruh 19 code cell notebook
+python -m pytest -m notebook
+```
+
+Dependency vulnerability scan menggunakan `pip-audit` secara terpisah agar
+alat security tidak menjadi dependency aplikasi:
+
+```bash
+python -m pip install pip-audit==2.10.1
+python -m pip_audit -r requirements-dev.txt
+```
+
+Workflow [Quality Gate](.github/workflows/quality-gate.yml) menjalankan
+application tests, notebook execution, dan dependency audit pada push ke
+`development/v2-finalization`/`main`, pull request ke `main`, atau pemicu
+manual.
 
 ## Keterbatasan
 
@@ -352,6 +399,7 @@ sebelum rilis final; README ini tidak mengklaim keduanya sudah tersedia.
 - [Methodology](docs/METHODOLOGY.md)
 - [Data attribution and license](docs/DATA_ATTRIBUTION.md)
 - [Release checklist](docs/RELEASE_CHECKLIST.md)
+- [Final audit report](docs/FINAL_AUDIT_REPORT.md)
 
 ## Lisensi dan atribusi
 

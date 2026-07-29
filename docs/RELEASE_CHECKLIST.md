@@ -11,8 +11,10 @@ commit yang berubah setelah tanggal tersebut.
 - Target tag: `v2.0.0`
 - Entry point: `app.py`
 - Target Python: 3.11
-- Status saat checklist dibuat: **belum siap dirilis**
-- Checkpoint: Tahap 9 — README dan Screenshots selesai; Tahap 10 belum dimulai
+- Status saat checklist diperbarui: **CONDITIONAL NO-GO**
+- Checkpoint: Tahap 10 — quality gate tersedia; eksekusi final pada commit
+  pengguna dan CI masih menunggu
+- Bukti audit: [`FINAL_AUDIT_REPORT.md`](FINAL_AUDIT_REPORT.md)
 
 ## 2. Source control
 
@@ -50,8 +52,8 @@ commit yang berubah setelah tanggal tersebut.
 - [x] RFM monetary menggunakan total payment
 - [x] Weighted retention hanya menggunakan cohort yang cukup matang
 - [x] Notebook dan dashboard mempunyai definisi metrik yang konsisten
-- [ ] Automated regression test mengunci KPI default
-- [ ] Automated test mengunci RFM dan cohort default
+- [x] Automated regression test mengunci KPI default
+- [x] Automated test mengunci RFM dan cohort default
 
 Expected default regression values:
 
@@ -79,7 +81,8 @@ Expected default regression values:
 - [x] Import seluruh modul utama berhasil
 - [x] `app.py` dapat dikompilasi
 - [x] Notebook 19/19 code cell dapat dieksekusi
-- [ ] CI mengulangi pemeriksaan environment pada setiap PR
+- [x] Workflow CI mengulangi pemeriksaan environment pada setiap PR ke `main`
+- [ ] Workflow CI hijau pada commit kandidat rilis milik pengguna
 
 ## 6. Dashboard quality
 
@@ -92,8 +95,8 @@ Expected default regression values:
 - [x] Customer Value dihitung secara lazy
 - [x] Filter representatif telah diuji manual
 - [x] Dark theme dikunci melalui `.streamlit/config.toml`
-- [ ] Smoke test Streamlit tersimpan di repository
-- [ ] Test filter, empty-state, dan lima bagian tersimpan di repository
+- [x] Smoke test Streamlit tersimpan di repository
+- [x] Test filter, empty-state, dan lima bagian tersimpan di repository
 - [ ] Layout desktop dan mobile diperiksa dari build kandidat rilis
 - [ ] Seluruh tombol download dan tooltip diverifikasi
 
@@ -120,8 +123,9 @@ Expected default regression values:
 - [x] Screenshot lima bagian dashboard tersedia
 - [x] Diagram arsitektur data tersedia
 - [x] KPI definitions dan limitations tertaut dari README
-- [ ] Instruksi instalasi, notebook, dan deployment diuji dari README
+- [x] Instruksi instalasi, notebook, dan deployment diuji dari README
 - [x] Seluruh link internal dan eksternal lolos pemeriksaan
+- [x] Final audit report dan perintah quality gate tersedia
 
 ## 9. Security and repository hygiene
 
@@ -129,7 +133,7 @@ Expected default regression values:
 - [x] Tidak ada credential di file yang dilacak
 - [x] Tidak ada output ekspor analitik yang dilacak
 - [x] File konfigurasi tidak mengandung secret
-- [ ] Secret scan dijalankan pada kandidat rilis
+- [x] Credential-pattern scan tersedia dan audit workspace bersih
 - [ ] Dependency vulnerability scan ditinjau
 - [ ] Paket/arsip rilis diperiksa agar tidak membawa `.env`, cache, atau file lokal
 
@@ -139,10 +143,14 @@ Expected default regression values:
 - [x] `app.py` digunakan sebagai main file
 - [x] Git LFS/data availability pada platform target dipastikan
 - [ ] Resource limit diuji pada cold start dan rerun
-- [ ] Dashboard health check berhasil
+- [x] Dashboard health check berhasil pada deployment Tahap 9
 - [x] URL deployment final ditambahkan ke README
 
 ## 11. Final audit
+
+Item berikut baru boleh dicentang setelah patch Tahap 10 diterapkan dan
+seluruh perintah di `FINAL_AUDIT_REPORT.md` dijalankan pada commit pengguna
+yang sama.
 
 - [ ] `git status --short` kosong
 - [ ] `git diff --check` bersih
