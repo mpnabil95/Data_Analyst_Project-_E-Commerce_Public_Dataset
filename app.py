@@ -1081,6 +1081,183 @@ def apply_filters(
     return fact.loc[mask]
 
 
+def build_customer_value_analysis(
+    order_view: pd.DataFrame,
+    payments: pd.DataFrame,
+) -> dict[str, Any] | None:
+    """Menghitung RFM dan cohort retention hanya saat bagiannya dibuka."""
+    order_columns = [
+        "order_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "customer_unique_id",
+    ]
+    delivered_orders = (
+        order_view.loc[
+            order_view["order_status"].eq("delivered"),
+            order_columns,
+        ]
+        .dropna(subset=["order_id", "order_purchase_timestamp", "customer_unique_id"])
+        .drop_duplicates("order_id")
+        .copy()
+    )
+    if delivered_orders.empty:
+        return None
+
+    selected_order_ids = delivered_orders["order_id"]
+    payment_by_order = (
+        payments.loc[payments["order_id"].isin(selected_order_ids)]
+        .groupby("order_id", as_index=False, observed=True)
+        .agg(payment_value=("payment_value", "sum"))
+    )
+    delivered_orders = delivered_orders.merge(
+        payment_by_order,
+        on="order_id",
+        how="left",
+        validate="one_to_one",
+    )
+    delivered_orders["payment_value"] = delivered_orders["payment_value"].fillna(0)
+
+    reference_date = (
+        delivered_orders["order_purchase_timestamp"].max().normalize()
+        + pd.Timedelta(days=1)
+    )
+    rfm = (
+        delivered_orders.groupby("customer_unique_id", as_index=False, observed=True)
+        .agg(
+            last_purchase=("order_purchase_timestamp", "max"),
+            frequency=("order_id", "nunique"),
+            monetary=("payment_value", "sum"),
+        )
+    )
+    rfm["recency"] = (
+        reference_date - rfm["last_purchase"].dt.normalize()
+    ).dt.days
+
+    recency_25, recency_75 = rfm["recency"].quantile([0.25, 0.75])
+    monetary_75, monetary_90 = rfm["monetary"].quantile([0.75, 0.90])
+    segment_conditions = [
+        rfm["frequency"].ge(2)
+        & rfm["recency"].le(recency_25)
+        & rfm["monetary"].ge(monetary_75),
+        rfm["frequency"].ge(2) & rfm["recency"].gt(recency_75),
+        rfm["frequency"].ge(2),
+        rfm["frequency"].eq(1) & rfm["monetary"].ge(monetary_90),
+        rfm["frequency"].eq(1) & rfm["recency"].le(recency_25),
+        rfm["frequency"].eq(1) & rfm["recency"].gt(recency_75),
+    ]
+    segment_labels = [
+        "Champions",
+        "At-Risk Repeat",
+        "Loyal Repeat",
+        "High-Value One-Time",
+        "Recent One-Time",
+        "Hibernating One-Time",
+    ]
+    rfm["segment"] = np.select(
+        segment_conditions,
+        segment_labels,
+        default="Regular One-Time",
+    )
+
+    segment_summary = (
+        rfm.groupby("segment", as_index=False, observed=True)
+        .agg(
+            customers=("customer_unique_id", "nunique"),
+            total_payment=("monetary", "sum"),
+            average_frequency=("frequency", "mean"),
+            average_payment=("monetary", "mean"),
+            median_recency=("recency", "median"),
+        )
+        .sort_values("total_payment", ascending=False)
+    )
+    segment_summary["customer_share"] = (
+        segment_summary["customers"] / segment_summary["customers"].sum()
+    )
+    total_payment = segment_summary["total_payment"].sum()
+    segment_summary["payment_share"] = (
+        segment_summary["total_payment"] / total_payment
+        if total_payment
+        else 0.0
+    )
+
+    cohort_base = delivered_orders[
+        ["customer_unique_id", "order_id", "order_purchase_timestamp"]
+    ].copy()
+    cohort_base["order_month"] = (
+        cohort_base["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
+    )
+    acquisition = (
+        cohort_base.groupby("customer_unique_id", as_index=False, observed=True)[
+            "order_month"
+        ]
+        .min()
+        .rename(columns={"order_month": "cohort_month"})
+    )
+    cohort_base = cohort_base.merge(
+        acquisition,
+        on="customer_unique_id",
+        validate="many_to_one",
+    )
+    cohort_base["cohort_index"] = (
+        (
+            cohort_base["order_month"].dt.year
+            - cohort_base["cohort_month"].dt.year
+        )
+        * 12
+        + cohort_base["order_month"].dt.month
+        - cohort_base["cohort_month"].dt.month
+    )
+    cohort_counts = (
+        cohort_base.groupby(
+            ["cohort_month", "cohort_index"],
+            observed=True,
+        )["customer_unique_id"]
+        .nunique()
+        .unstack(fill_value=0)
+        .sort_index()
+    )
+    retention = cohort_counts.div(cohort_counts[0], axis=0)
+
+    def weighted_retention(month_index: int) -> float:
+        if month_index not in cohort_counts.columns:
+            return np.nan
+        latest_cohort = cohort_counts.index.max()
+        eligible = cohort_counts.index <= (
+            latest_cohort - pd.DateOffset(months=month_index)
+        )
+        eligible_counts = cohort_counts.loc[eligible]
+        denominator = eligible_counts[0].sum()
+        if denominator == 0:
+            return np.nan
+        return float(eligible_counts[month_index].sum() / denominator)
+
+    repeat_customer_rate = float(rfm["frequency"].ge(2).mean())
+    month1_retention = weighted_retention(1)
+    month3_retention = weighted_retention(3)
+
+    # Maksimal 14 kohort matang menjaga heatmap ringkas. Pada data default,
+    # rentang ini sama dengan notebook: 2017-01 sampai 2018-02.
+    heatmap_columns = [
+        month_index for month_index in range(7) if month_index in retention.columns
+    ]
+    latest_cohort = retention.index.max()
+    mature_cohorts = retention.index <= (
+        latest_cohort - pd.DateOffset(months=6)
+    )
+    cohort_view = retention.loc[mature_cohorts, heatmap_columns].tail(14)
+    if cohort_view.empty:
+        cohort_view = retention.loc[:, heatmap_columns].tail(14)
+
+    return {
+        "segment_summary": segment_summary,
+        "cohort_view": cohort_view,
+        "repeat_customer_rate": repeat_customer_rate,
+        "month1_retention": month1_retention,
+        "month3_retention": month3_retention,
+    }
+
+
 def make_customer_map(points: pd.DataFrame, mode: str) -> folium.Map:
     """Membuat peta bubble atau heatmap yang dapat di-zoom dan digeser."""
     center = [points["customer_lat"].median(), points["customer_lng"].median()]
@@ -1438,7 +1615,13 @@ def main() -> None:
 
     active_section = st.segmented_control(
         "Bagian dashboard",
-        ["Ringkasan", "Customer & Peta", "Produk & Seller", "Layanan & Pembayaran"],
+        [
+            "Ringkasan",
+            "Customer & Peta",
+            "Customer Value",
+            "Produk & Seller",
+            "Layanan & Pembayaran",
+        ],
         default="Ringkasan",
         selection_mode="single",
         required=True,
@@ -1670,6 +1853,201 @@ def main() -> None:
                 margin=dict(l=20, r=20, t=25, b=75),
             )
             st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+    # ------------------------------------------------------------- Customer Value
+    elif active_section == "Customer Value":
+        customer_value = build_customer_value_analysis(order_view, payments)
+        if customer_value is None:
+            st.info(
+                "RFM dan cohort retention memerlukan minimal satu pesanan "
+                "berstatus delivered pada hasil filter."
+            )
+        else:
+            segment_summary = customer_value["segment_summary"]
+            cohort_view = customer_value["cohort_view"]
+            repeat_rate = customer_value["repeat_customer_rate"]
+            month1_retention = customer_value["month1_retention"]
+            month3_retention = customer_value["month3_retention"]
+            top_segment = segment_summary.iloc[0]
+
+            section_heading(
+                "Customer Value",
+                "RFM mengukur recency, frequency, dan total payment; cohort menunjukkan pembelian ulang sejak bulan akuisisi.",
+            )
+            metric_columns = st.columns(4, gap="small")
+            with metric_columns[0]:
+                st.metric(
+                    "Repeat customer",
+                    f"{repeat_rate:.2%}",
+                    help="Customer dengan minimal dua delivered order pada hasil filter.",
+                )
+            with metric_columns[1]:
+                st.metric(
+                    "Retention M+1",
+                    (
+                        f"{month1_retention:.2%}"
+                        if np.isfinite(month1_retention)
+                        else "N/A"
+                    ),
+                    help="Weighted retention bulan pertama dari kohort yang sudah matang.",
+                )
+            with metric_columns[2]:
+                st.metric(
+                    "Retention M+3",
+                    (
+                        f"{month3_retention:.2%}"
+                        if np.isfinite(month3_retention)
+                        else "N/A"
+                    ),
+                    help="Weighted retention bulan ketiga dari kohort yang sudah matang.",
+                )
+            with metric_columns[3]:
+                st.metric(
+                    "Kontributor payment",
+                    str(top_segment["segment"]),
+                    f"{top_segment['payment_share']:.1%} total payment",
+                    delta_color="off",
+                )
+
+            left, right = st.columns([1, 1.15], gap="large")
+            with left:
+                section_heading(
+                    "Komposisi segmen RFM",
+                    "Bandingkan proporsi customer dengan kontribusi total payment.",
+                )
+                segment_plot = segment_summary[
+                    ["segment", "customer_share", "payment_share"]
+                ].melt(
+                    id_vars="segment",
+                    var_name="metric",
+                    value_name="share",
+                )
+                segment_plot["metric"] = segment_plot["metric"].map(
+                    {
+                        "customer_share": "Porsi customer",
+                        "payment_share": "Porsi payment",
+                    }
+                )
+                segment_order = segment_summary.sort_values("total_payment")[
+                    "segment"
+                ].tolist()
+                fig = px.bar(
+                    segment_plot,
+                    x="share",
+                    y="segment",
+                    color="metric",
+                    orientation="h",
+                    barmode="group",
+                    category_orders={"segment": segment_order},
+                    color_discrete_map={
+                        "Porsi customer": COLORS["blue"],
+                        "Porsi payment": COLORS["emerald"],
+                    },
+                    labels={
+                        "share": "Porsi",
+                        "segment": "",
+                        "metric": "",
+                    },
+                )
+                fig.update_xaxes(tickformat=".0%")
+                fig.update_traces(
+                    hovertemplate="<b>%{y}</b><br>%{fullData.name}: %{x:.1%}<extra></extra>"
+                )
+                st.plotly_chart(
+                    style_figure(fig, 475),
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+
+            with right:
+                section_heading(
+                    "Cohort retention bulanan",
+                    "Persentase customer yang kembali pada bulan ke-0 sampai ke-6 sejak pembelian pertama.",
+                )
+                heatmap = go.Figure(
+                    data=go.Heatmap(
+                        z=cohort_view.to_numpy(),
+                        x=[f"M+{column}" for column in cohort_view.columns],
+                        y=[
+                            cohort.strftime("%Y-%m")
+                            for cohort in cohort_view.index
+                        ],
+                        colorscale=[
+                            [0, COLORS["surface_2"]],
+                            [0.45, COLORS["blue"]],
+                            [1, COLORS["cyan"]],
+                        ],
+                        zmin=0,
+                        zmax=0.02,
+                        text=np.vectorize(lambda value: f"{value:.1%}")(
+                            cohort_view.to_numpy()
+                        ),
+                        texttemplate="%{text}",
+                        textfont={"size": 10},
+                        colorbar={
+                            "title": "Retention",
+                            "tickformat": ".1%",
+                            "thickness": 12,
+                        },
+                        hovertemplate=(
+                            "Kohort %{y}<br>%{x}: %{z:.2%}<extra></extra>"
+                        ),
+                    )
+                )
+                heatmap = style_figure(heatmap, 475)
+                heatmap.update_yaxes(autorange="reversed")
+                heatmap.update_layout(
+                    margin=dict(l=60, r=25, t=38, b=45),
+                    xaxis_title="Bulan sejak akuisisi",
+                    yaxis_title="Bulan akuisisi",
+                )
+                st.plotly_chart(
+                    heatmap,
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+
+            with st.expander("Detail segmen RFM", expanded=False):
+                segment_table = segment_summary.rename(
+                    columns={
+                        "segment": "Segmen",
+                        "customers": "Customer",
+                        "total_payment": "Total payment",
+                        "average_frequency": "Frekuensi rata-rata",
+                        "average_payment": "Payment rata-rata",
+                        "median_recency": "Median recency (hari)",
+                        "customer_share": "Porsi customer",
+                        "payment_share": "Porsi payment",
+                    }
+                ).copy()
+                segment_table["Total payment"] = segment_table[
+                    "Total payment"
+                ].map(format_currency)
+                segment_table["Payment rata-rata"] = segment_table[
+                    "Payment rata-rata"
+                ].map(format_currency)
+                segment_table["Frekuensi rata-rata"] = segment_table[
+                    "Frekuensi rata-rata"
+                ].map(lambda value: f"{value:.2f}")
+                segment_table["Median recency (hari)"] = segment_table[
+                    "Median recency (hari)"
+                ].map(lambda value: f"{value:.0f}")
+                segment_table["Porsi customer"] = segment_table[
+                    "Porsi customer"
+                ].map(lambda value: f"{value:.1%}")
+                segment_table["Porsi payment"] = segment_table[
+                    "Porsi payment"
+                ].map(lambda value: f"{value:.1%}")
+                st.dataframe(
+                    segment_table,
+                    width="stretch",
+                    hide_index=True,
+                )
+            st.caption(
+                "RFM bersifat heuristik dan mengikuti filter aktif. Untuk filter kategori "
+                "atau state seller, order yang cocok dipilih lebih dahulu; monetary tetap "
+                "mencakup seluruh pembayaran order tersebut."
+            )
 
     # -------------------------------------------------------------- Produk/Seller
     elif active_section == "Produk & Seller":
