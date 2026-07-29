@@ -1,6 +1,7 @@
 # Riwayat Pengembangan Dashboard `app.py`
 
-> Dokumentasi perubahan `app_2_v1.py` hingga `app_2_v15.py`  
+> Dokumentasi perubahan `app_2_v1.py` hingga `app_2_v15.py`, dilanjutkan
+> finalisasi `app.py` untuk v2.0.0
 > Proyek: **FP-E-Commerce — Olist Commerce Intelligence**  
 > Framework: **Streamlit, Pandas, Plotly, Folium, dan Streamlit-Folium**  
 > Entry point rilis v2.0.0: **`app.py`**, hasil promosi dari `app_2_v15.py`
@@ -64,12 +65,16 @@ Versi awal telah menyediakan:
 
 ### 2.2 Struktur halaman
 
-Dashboard menggunakan empat tab utama:
+Baseline historis menggunakan empat tab utama:
 
 1. **Ringkasan** — tren transaksi, status pesanan, kategori, dan kontribusi wilayah;
 2. **Customer & Peta** — distribusi customer dan visualisasi geospasial;
 3. **Produk & Seller** — performa produk, kategori, seller, dan state seller;
 4. **Layanan & Pembayaran** — pengiriman, ulasan, keterlambatan, dan metode pembayaran.
+
+Pada finalisasi v2.0.0, navigasi dipindahkan ke segmented control dan ditambah
+bagian kelima, **Customer Value**, yang memuat RFM dan cohort retention secara
+lazy-render.
 
 ### 2.3 Masalah awal
 
@@ -1075,20 +1080,22 @@ Versi final menggunakan:
 
 ---
 
-# 8. Perubahan yang Tidak Mengubah Logika Analitik
+# 8. Logika Analitik dan Koreksi Definisi Metrik
 
-Sebagian besar revisi `v4–v15` berfokus pada presentasi. Hal-hal berikut pada dasarnya tetap dipertahankan:
+Sebagian besar revisi `v4–v15` berfokus pada presentasi. Definisi metrik
+kemudian dikoreksi dan dikunci pada finalisasi `app.py`:
 
-- definisi GMV sebagai `price + freight_value`;
+- Product GMV didefinisikan sebagai `price`, tidak termasuk freight;
+- order value didefinisikan sebagai `price + freight_value`;
 - jumlah pesanan berdasarkan `order_id` unik;
 - customer unik berdasarkan `customer_unique_id`;
-- average order value sebagai GMV dibagi pesanan;
+- average order value sebagai total order value dibagi pesanan unik;
 - agregasi review pada level pesanan;
 - filter status default `delivered` jika tersedia;
 - pembanding periode sebelumnya dengan panjang periode yang sama;
 - analisis geospasial berdasarkan koordinat ZIP prefix;
 - ekspor hasil filter pada level pesanan;
-- struktur empat tab analisis;
+- lima bagian analisis pada `app.py`;
 - segmentasi customer menjadi one-time dan repeat customer.
 
 Dengan kata lain, iterasi panjang tidak mengubah tujuan bisnis dashboard. Perubahan terutama dilakukan untuk meningkatkan:
@@ -1173,5 +1180,82 @@ Versi final mempertahankan kemampuan analitik dashboard awal, tetapi meningkatka
 
 ---
 
-**Dokumen terakhir diperbarui:** 19 Juli 2026  
-**Status:** Final documentation updated through `app_2_v15.py`; promoted to `app.py` for v2.0.0
+# 11. Finalisasi `app.py` untuk v2.0.0
+
+Setelah `app_2_v15.py` dipromosikan menjadi `app.py`, enam commit finalisasi
+memperbaiki struktur rilis, reproduksibilitas, akurasi metrik, performa, dan
+feature parity.
+
+| Tahap | Tanggal | Commit | Hasil |
+|---|---:|---|---|
+| 1 | 28 Juli 2026 | `90f4502` | Membersihkan path rilis, file duplikat, dan artefak repository |
+| 2 | 28 Juli 2026 | `bceabfa` | Menetapkan Python 3.11 serta requirements runtime, notebook, dan development |
+| 3 | 28 Juli 2026 | `d834a6b` | Memperbaiki validasi data, geolocation, grain, Product GMV, order value, AOV, dan rating |
+| 4 | 29 Juli 2026 | `f52a92e` | Mengurangi penggunaan memori dan pekerjaan rerun melalui cache serta render per bagian |
+| 5 | 29 Juli 2026 | `d39e315` | Menyelaraskan notebook, environment, execution state, dan metrik dengan dashboard |
+| 6 | 29 Juli 2026 | `2b55662` | Menambahkan Customer Value lazy-render berisi RFM dan cohort retention |
+
+## 11.1 Data quality dan metric contract
+
+`app.py` memvalidasi kolom wajib serta jumlah baris minimum untuk mendeteksi
+CSV terpotong atau pointer Git LFS. Geolocation dibersihkan dari duplikasi dan
+koordinat di luar bounding box Brasil sebelum median prefix dihitung.
+
+Kontrak metrik final:
+
+- Product GMV = jumlah harga produk;
+- order value = harga produk + freight;
+- AOV = total order value / order unik;
+- rating = rata-rata review pada level order;
+- repeat customer = customer dengan minimal dua delivered order;
+- monetary RFM = total payment customer.
+
+Default dashboard telah direkonsiliasi dengan notebook: 96.478 delivered
+orders, 93.358 customer unik, Product GMV R$13.221.498,11, order value
+R$15.419.773,75, AOV R$159,83, dan rating 4,1562.
+
+## 11.2 Lazy section rendering
+
+Navigasi final menggunakan lima bagian:
+
+1. Ringkasan;
+2. Customer & Peta;
+3. Customer Value;
+4. Produk & Seller;
+5. Layanan & Pembayaran.
+
+Visual dan agregasi khusus bagian hanya dibuat saat bagian tersebut aktif.
+Customer Value menghitung RFM serta cohort retention secara lazy, menampilkan
+empty-state bila tidak terdapat delivered order, dan tidak menahan tabel RFM
+customer-level setelah ringkasan selesai dibuat.
+
+## 11.3 Customer Value
+
+RFM menggunakan recency terhadap satu hari setelah delivered order terakhir,
+frequency berupa delivered order unik, dan monetary berupa total
+`payment_value`. Tujuh segmen yang tersedia adalah:
+
+- `Champions`;
+- `At-Risk Repeat`;
+- `Loyal Repeat`;
+- `High-Value One-Time`;
+- `Recent One-Time`;
+- `Hibernating One-Time`;
+- `Regular One-Time`.
+
+Cohort retention menampilkan M+0 sampai M+6. Weighted retention hanya memakai
+cohort yang sudah cukup matang. Nilai default yang diregresikan adalah repeat
+customer 3,0003%, M+1 0,4827%, dan M+3 0,2547%.
+
+## 11.4 Dokumentasi terkait
+
+- [Data dictionary](DATA_DICTIONARY.md)
+- [Methodology](METHODOLOGY.md)
+- [Data attribution dan lisensi](DATA_ATTRIBUTION.md)
+- [Release checklist](RELEASE_CHECKLIST.md)
+
+---
+
+**Dokumen terakhir diperbarui:** 29 Juli 2026
+**Status:** riwayat `app_2_v1.py`–`app_2_v15.py` dan finalisasi `app.py`
+hingga Customer Value telah terdokumentasi untuk kandidat v2.0.0.
