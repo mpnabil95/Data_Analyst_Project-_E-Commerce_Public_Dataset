@@ -1,3 +1,5 @@
+<div align="center">
+
 # Olist E-Commerce Intelligence
 
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
@@ -18,6 +20,8 @@ RFM, serta cohort retention melalui Streamlit.
 · [**Lihat data dictionary**](docs/DATA_DICTIONARY.md)
 
 ![Ringkasan Olist Commerce Intelligence](docs/screenshots/01-ringkasan.jpg)
+
+</div>
 
 ## Daftar isi
 
