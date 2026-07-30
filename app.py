@@ -2,7 +2,7 @@
 
 Jalankan aplikasi dari folder yang berisi file ini dengan perintah:
 
-    streamlit run app_2_v15.py
+    streamlit run app.py
 
 Dependensi utama:
 
@@ -49,7 +49,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Dashboard v14 menggunakan satu design system: dark mode.
+# Versi rilis menggunakan satu design system yang konsisten: dark mode.
 DARK_MODE = True
 
 COLORS = {
@@ -386,49 +386,16 @@ st.markdown(
             margin: .45rem 0 .9rem;
         }
 
-        /* Tabs: setiap menu dibungkus seperti tombol/pill */
-        div[data-testid="stTabs"] [role="tablist"] {
-            display: flex;
-            flex-wrap: wrap;
-            gap: .55rem;
+        /* Navigasi bersyarat: hanya bagian aktif yang dihitung pada setiap rerun. */
+        .st-key-dashboard_section {
             padding: .28rem 0 .72rem;
             border-bottom: 1px solid rgba(100,116,139,.28);
         }
 
-        div[data-testid="stTabs"] button[role="tab"] {
-            width: auto !important;
-            min-width: max-content !important;
-            height: auto !important;
-            padding: .52rem .88rem !important;
-            border: 1px solid rgba(100,116,139,.34) !important;
-            border-radius: 10px !important;
-            background: rgba(13,24,40,.72) !important;
-            color: #CBD5E1 !important;
+        .st-key-dashboard_section button {
+            min-height: 2.55rem;
+            border-color: rgba(100,116,139,.34) !important;
             font-weight: 700 !important;
-            transition:
-                background .18s ease,
-                border-color .18s ease,
-                transform .18s ease;
-        }
-
-        div[data-testid="stTabs"] button[role="tab"]:hover {
-            background: rgba(24,43,70,.92) !important;
-            border-color: rgba(96,165,250,.55) !important;
-            color: #FFFFFF !important;
-            transform: translateY(-1px);
-        }
-
-        div[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
-            background:
-                linear-gradient(135deg, rgba(47,107,255,.28), rgba(139,92,246,.20)) !important;
-            border-color: rgba(96,165,250,.75) !important;
-            color: #FFFFFF !important;
-            box-shadow: inset 0 0 0 1px rgba(47,107,255,.14);
-        }
-
-        div[data-testid="stTabs"] [data-baseweb="tab-highlight"],
-        div[data-testid="stTabs"] [data-baseweb="tab-border"] {
-            display: none !important;
         }
 
         /* Inputs di area utama */
@@ -538,6 +505,62 @@ REQUIRED_FILES = {
     "orders": "orders_dataset.csv",
 }
 
+# Ambang minimum mengikuti notebook analisis. Tujuannya menangkap CSV yang
+# terpotong atau masih berupa pointer Git LFS, bukan membatasi baris analisis.
+EXPECTED_MIN_ROWS = {
+    "customers": 99_000,
+    "sellers": 3_000,
+    "payments": 103_000,
+    "translation": 70,
+    "products": 32_000,
+    "geolocation": 1_000_000,
+    "reviews": 99_000,
+    "items": 112_000,
+    "orders": 99_000,
+}
+
+# Bounding box konservatif Brasil, selaras dengan pemeriksaan spasial notebook.
+BRAZIL_LATITUDE_BOUNDS = (-34.0, 6.0)
+BRAZIL_LONGITUDE_BOUNDS = (-74.0, -34.0)
+
+# Tipe data kompak untuk kolom yang aman dipersempit. Seluruh kolom tetap
+# dibaca agar statistik kualitas data tidak berubah.
+CSV_DTYPES = {
+    "customers": {
+        "customer_zip_code_prefix": "int32",
+        "customer_city": "category",
+        "customer_state": "category",
+    },
+    "sellers": {
+        "seller_zip_code_prefix": "int32",
+        "seller_city": "category",
+        "seller_state": "category",
+    },
+    "payments": {
+        "payment_sequential": "int8",
+        "payment_type": "category",
+        "payment_installments": "int16",
+    },
+    "geolocation": {
+        "geolocation_zip_code_prefix": "int32",
+        "geolocation_city": "category",
+        "geolocation_state": "category",
+    },
+    "reviews": {"review_score": "int8"},
+    "items": {"order_item_id": "int16"},
+    "orders": {"order_status": "category"},
+}
+
+CSV_PARSE_DATES = {
+    "orders": [
+        "order_purchase_timestamp",
+        "order_approved_at",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    ]
+}
+
 
 def normalize_filename(name: str) -> str:
     """Menghapus prefiks angka agar file ``01-...`` tetap dikenali."""
@@ -582,18 +605,28 @@ def discover_local_sources() -> dict[str, Path]:
     return found
 
 
-@st.cache_data(show_spinner=False)
-def read_csv_path(path: str, modified_ns: int) -> pd.DataFrame:
-    """Membaca CSV lokal; waktu modifikasi menjadi bagian kunci cache."""
+@st.cache_resource(show_spinner=False, max_entries=32)
+def read_csv_path(dataset_key: str, path: str, modified_ns: int) -> pd.DataFrame:
+    """Membaca CSV lokal sekali sebagai resource immutable."""
     del modified_ns
-    return pd.read_csv(path, low_memory=False)
+    return pd.read_csv(
+        path,
+        low_memory=False,
+        dtype=CSV_DTYPES.get(dataset_key),
+        parse_dates=CSV_PARSE_DATES.get(dataset_key),
+    )
 
 
-@st.cache_data(show_spinner=False)
-def read_csv_bytes(file_name: str, payload: bytes) -> pd.DataFrame:
-    """Membaca CSV unggahan tanpa menyimpan berkas sementara."""
+@st.cache_resource(show_spinner=False, max_entries=18)
+def read_csv_bytes(dataset_key: str, file_name: str, payload: bytes) -> pd.DataFrame:
+    """Membaca CSV unggahan sekali tanpa menyimpan berkas sementara."""
     del file_name
-    return pd.read_csv(io.BytesIO(payload), low_memory=False)
+    return pd.read_csv(
+        io.BytesIO(payload),
+        low_memory=False,
+        dtype=CSV_DTYPES.get(dataset_key),
+        parse_dates=CSV_PARSE_DATES.get(dataset_key),
+    )
 
 
 def load_sources(
@@ -611,13 +644,13 @@ def load_sources(
         if key in local_sources:
             path = local_sources[key]
             stat = path.stat()
-            datasets[key] = read_csv_path(str(path), stat.st_mtime_ns)
+            datasets[key] = read_csv_path(key, str(path), stat.st_mtime_ns)
             fingerprints.append(f"{key}:{path}:{stat.st_size}:{stat.st_mtime_ns}")
         elif canonical_name in uploaded_lookup:
             upload = uploaded_lookup[canonical_name]
             payload = upload.getvalue()
             digest = hashlib.sha256(payload).hexdigest()
-            datasets[key] = read_csv_bytes(upload.name, payload)
+            datasets[key] = read_csv_bytes(key, upload.name, payload)
             fingerprints.append(f"{key}:{upload.name}:{digest}")
         else:
             missing.append(canonical_name)
@@ -645,27 +678,64 @@ def validate_columns(datasets: dict[str, pd.DataFrame]) -> list[str]:
     return errors
 
 
+def validate_dataset_completeness(datasets: dict[str, pd.DataFrame]) -> list[str]:
+    """Mendeteksi CSV yang terlalu kecil dan kemungkinan terpotong."""
+    errors: list[str] = []
+    for key, minimum_rows in EXPECTED_MIN_ROWS.items():
+        actual_rows = len(datasets[key])
+        if actual_rows < minimum_rows:
+            errors.append(
+                f"{REQUIRED_FILES[key]}: {actual_rows:,} baris "
+                f"(minimum yang diharapkan {minimum_rows:,})"
+            )
+    return errors
+
+
 # -----------------------------------------------------------------------------
 # Pembuatan data mart
 # -----------------------------------------------------------------------------
-@st.cache_data(show_spinner="Menyiapkan data mart dan koordinat peta …")
+@st.cache_resource(
+    show_spinner="Menyiapkan data mart dan koordinat peta …",
+    max_entries=8,
+)
 def build_data_model(
     fingerprint: tuple[str, ...], _datasets: dict[str, pd.DataFrame]
 ) -> dict[str, pd.DataFrame]:
-    """Membangun tabel analitik level item, order, pembayaran, dan kualitas data."""
+    """Membangun resource analitik immutable untuk dashboard."""
     del fingerprint
-    data = {name: frame.copy() for name, frame in _datasets.items()}
+    data = _datasets
 
-    # Satu kode pos memiliki banyak titik; median mengurangi pengaruh outlier.
+    # Bersihkan duplikasi dan koordinat non-Brasil sebelum mengambil median.
+    geo_columns = [
+        "geolocation_zip_code_prefix",
+        "geolocation_lat",
+        "geolocation_lng",
+    ]
     geo = data["geolocation"].dropna(
         subset=["geolocation_zip_code_prefix", "geolocation_lat", "geolocation_lng"]
+    ).drop_duplicates()
+    geo = geo[geo_columns].copy()
+    geo["geolocation_lat"] = pd.to_numeric(geo["geolocation_lat"], errors="coerce")
+    geo["geolocation_lng"] = pd.to_numeric(geo["geolocation_lng"], errors="coerce")
+    geo = geo.dropna(subset=["geolocation_lat", "geolocation_lng"])
+    valid_geo = (
+        geo["geolocation_lat"].between(*BRAZIL_LATITUDE_BOUNDS)
+        & geo["geolocation_lng"].between(*BRAZIL_LONGITUDE_BOUNDS)
     )
+    geo = geo.loc[valid_geo].copy()
     geo_zip = (
-        geo.groupby("geolocation_zip_code_prefix", as_index=False)
+        geo.groupby("geolocation_zip_code_prefix", as_index=False, observed=True)
         .agg(customer_lat=("geolocation_lat", "median"), customer_lng=("geolocation_lng", "median"))
     )
 
-    customers = data["customers"].merge(
+    customer_columns = [
+        "customer_id",
+        "customer_unique_id",
+        "customer_zip_code_prefix",
+        "customer_city",
+        "customer_state",
+    ]
+    customers = data["customers"][customer_columns].merge(
         geo_zip,
         left_on="customer_zip_code_prefix",
         right_on="geolocation_zip_code_prefix",
@@ -673,11 +743,17 @@ def build_data_model(
     )
     customers = customers.drop(columns=["geolocation_zip_code_prefix"], errors="ignore")
 
-    orders = data["orders"].copy()
+    order_source_columns = [
+        "order_id",
+        "customer_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "order_delivered_customer_date",
+        "order_estimated_delivery_date",
+    ]
+    orders = data["orders"][order_source_columns].copy()
     date_columns = [
         "order_purchase_timestamp",
-        "order_approved_at",
-        "order_delivered_carrier_date",
         "order_delivered_customer_date",
         "order_estimated_delivery_date",
     ]
@@ -686,37 +762,50 @@ def build_data_model(
             orders[column] = pd.to_datetime(orders[column], errors="coerce")
 
     orders = orders.merge(customers, on="customer_id", how="left", validate="many_to_one")
-    orders["purchase_date"] = orders["order_purchase_timestamp"].dt.normalize()
     orders["delivery_days"] = (
         orders["order_delivered_customer_date"] - orders["order_purchase_timestamp"]
     ).dt.total_seconds() / 86_400
     orders["delivery_delay_days"] = (
         orders["order_delivered_customer_date"] - orders["order_estimated_delivery_date"]
     ).dt.total_seconds() / 86_400
-    orders["is_on_time"] = np.where(
-        orders["order_delivered_customer_date"].notna(),
-        orders["order_delivered_customer_date"] <= orders["order_estimated_delivery_date"],
-        np.nan,
+    delivered_mask = orders["order_delivered_customer_date"].notna()
+    orders["is_on_time"] = pd.Series(pd.NA, index=orders.index, dtype="boolean")
+    orders.loc[delivered_mask, "is_on_time"] = (
+        orders.loc[delivered_mask, "order_delivered_customer_date"]
+        <= orders.loc[delivered_mask, "order_estimated_delivery_date"]
     )
 
     review_order = (
-        data["reviews"].groupby("order_id", as_index=False)
-        .agg(review_score=("review_score", "mean"), review_count=("review_score", "size"))
+        data["reviews"].groupby("order_id", as_index=False, observed=True)
+        .agg(review_score=("review_score", "mean"))
     )
     orders = orders.merge(review_order, on="order_id", how="left", validate="one_to_one")
 
     lifetime = (
-        orders.groupby("customer_unique_id")["order_id"]
+        orders.loc[orders["order_status"].eq("delivered")]
+        .groupby("customer_unique_id", observed=True)["order_id"]
         .nunique()
-        .rename("customer_lifetime_orders")
+        .rename("customer_lifetime_delivered_orders")
     )
     orders = orders.merge(lifetime, on="customer_unique_id", how="left")
-    orders["customer_segment"] = np.where(
-        orders["customer_lifetime_orders"].gt(1), "Repeat customer", "One-time customer"
+    orders["customer_lifetime_delivered_orders"] = (
+        orders["customer_lifetime_delivered_orders"].fillna(0).astype("int16")
+    )
+    orders["customer_segment"] = np.select(
+        [
+            orders["customer_lifetime_delivered_orders"].gt(1),
+            orders["customer_lifetime_delivered_orders"].eq(1),
+        ],
+        ["Repeat customer", "One-time customer"],
+        default="Belum ada pesanan selesai",
     )
 
-    products = data["products"].merge(
-        data["translation"], on="product_category_name", how="left", validate="many_to_one"
+    product_source = data["products"][["product_id", "product_category_name"]]
+    translation_source = data["translation"][
+        ["product_category_name", "product_category_name_english"]
+    ]
+    products = product_source.merge(
+        translation_source, on="product_category_name", how="left", validate="many_to_one"
     )
     products["category"] = products["product_category_name_english"].fillna(
         products["product_category_name"]
@@ -725,34 +814,71 @@ def build_data_model(
         products["category"].fillna("unknown").str.replace("_", " ", regex=False).str.title()
     )
 
-    seller_columns = [column for column in ["seller_id", "seller_city", "seller_state"] if column in data["sellers"].columns]
+    seller_columns = ["seller_id", "seller_state"]
     item_columns = ["order_id", "order_item_id", "product_id", "seller_id", "price", "freight_value"]
-    item_columns = [column for column in item_columns if column in data["items"].columns]
     product_columns = ["product_id", "category"]
+    order_fact_columns = [
+        "order_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "customer_unique_id",
+        "customer_city",
+        "customer_state",
+        "customer_lat",
+        "customer_lng",
+        "delivery_days",
+        "delivery_delay_days",
+        "is_on_time",
+        "review_score",
+        "customer_segment",
+    ]
     fact = (
         data["items"][item_columns]
         .merge(products[product_columns], on="product_id", how="left", validate="many_to_one")
         .merge(data["sellers"][seller_columns], on="seller_id", how="left", validate="many_to_one")
-        .merge(orders, on="order_id", how="left", validate="many_to_one")
+        .merge(orders[order_fact_columns], on="order_id", how="left", validate="many_to_one")
     )
-    fact["category"] = fact["category"].fillna("Unknown")
-    fact["seller_state"] = fact["seller_state"].fillna("Unknown")
+    fact["category"] = (
+        fact["category"].astype("string").fillna("Unknown").astype("category")
+    )
+    fact["seller_state"] = (
+        fact["seller_state"].astype("string").fillna("Unknown").astype("category")
+    )
+    for column in [
+        "product_id",
+        "seller_id",
+        "order_status",
+        "customer_city",
+        "customer_state",
+        "customer_segment",
+    ]:
+        fact[column] = fact[column].astype("category")
     fact["price"] = pd.to_numeric(fact["price"], errors="coerce").fillna(0)
     fact["freight_value"] = pd.to_numeric(fact["freight_value"], errors="coerce").fillna(0)
-    fact["gmv"] = fact["price"] + fact["freight_value"]
+    fact = fact.rename(columns={"price": "gmv"})
+    fact["order_value"] = fact["gmv"] + fact["freight_value"]
 
-    payments = data["payments"].copy()
+    payments = data["payments"][["order_id", "payment_type", "payment_value"]].copy()
     payments["payment_value"] = pd.to_numeric(payments["payment_value"], errors="coerce").fillna(0)
     payments["payment_label"] = (
-        payments["payment_type"].fillna("unknown").str.replace("_", " ", regex=False).str.title()
+        payments["payment_type"]
+        .astype("string")
+        .fillna("unknown")
+        .str.replace("_", " ", regex=False)
+        .str.title()
+        .astype("category")
     )
+    payments = payments.drop(columns="payment_type")
 
     quality_rows = []
     for name, frame in data.items():
+        used_rows = len(geo) if name == "geolocation" else len(frame)
         quality_rows.append(
             {
                 "Dataset": REQUIRED_FILES[name],
                 "Baris": len(frame),
+                "Baris digunakan": used_rows,
+                "Baris dikeluarkan": len(frame) - used_rows,
                 "Kolom": len(frame.columns),
                 "Sel kosong": int(frame.isna().sum().sum()),
                 "Baris duplikat": int(frame.duplicated().sum()),
@@ -762,7 +888,6 @@ def build_data_model(
 
     return {
         "fact": fact,
-        "orders": orders,
         "payments": payments,
         "quality": quality,
     }
@@ -855,7 +980,7 @@ def render_kpi_card(
             )
             st.plotly_chart(
                 fig,
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False, "staticPlot": True},
                 key=f"spark_{key}",
             )
@@ -953,7 +1078,184 @@ def apply_filters(
         mask &= fact["order_status"].isin(statuses)
     if seller_states:
         mask &= fact["seller_state"].isin(seller_states)
-    return fact.loc[mask].copy()
+    return fact.loc[mask]
+
+
+def build_customer_value_analysis(
+    order_view: pd.DataFrame,
+    payments: pd.DataFrame,
+) -> dict[str, Any] | None:
+    """Menghitung RFM dan cohort retention hanya saat bagiannya dibuka."""
+    order_columns = [
+        "order_id",
+        "order_status",
+        "order_purchase_timestamp",
+        "customer_unique_id",
+    ]
+    delivered_orders = (
+        order_view.loc[
+            order_view["order_status"].eq("delivered"),
+            order_columns,
+        ]
+        .dropna(subset=["order_id", "order_purchase_timestamp", "customer_unique_id"])
+        .drop_duplicates("order_id")
+        .copy()
+    )
+    if delivered_orders.empty:
+        return None
+
+    selected_order_ids = delivered_orders["order_id"]
+    payment_by_order = (
+        payments.loc[payments["order_id"].isin(selected_order_ids)]
+        .groupby("order_id", as_index=False, observed=True)
+        .agg(payment_value=("payment_value", "sum"))
+    )
+    delivered_orders = delivered_orders.merge(
+        payment_by_order,
+        on="order_id",
+        how="left",
+        validate="one_to_one",
+    )
+    delivered_orders["payment_value"] = delivered_orders["payment_value"].fillna(0)
+
+    reference_date = (
+        delivered_orders["order_purchase_timestamp"].max().normalize()
+        + pd.Timedelta(days=1)
+    )
+    rfm = (
+        delivered_orders.groupby("customer_unique_id", as_index=False, observed=True)
+        .agg(
+            last_purchase=("order_purchase_timestamp", "max"),
+            frequency=("order_id", "nunique"),
+            monetary=("payment_value", "sum"),
+        )
+    )
+    rfm["recency"] = (
+        reference_date - rfm["last_purchase"].dt.normalize()
+    ).dt.days
+
+    recency_25, recency_75 = rfm["recency"].quantile([0.25, 0.75])
+    monetary_75, monetary_90 = rfm["monetary"].quantile([0.75, 0.90])
+    segment_conditions = [
+        rfm["frequency"].ge(2)
+        & rfm["recency"].le(recency_25)
+        & rfm["monetary"].ge(monetary_75),
+        rfm["frequency"].ge(2) & rfm["recency"].gt(recency_75),
+        rfm["frequency"].ge(2),
+        rfm["frequency"].eq(1) & rfm["monetary"].ge(monetary_90),
+        rfm["frequency"].eq(1) & rfm["recency"].le(recency_25),
+        rfm["frequency"].eq(1) & rfm["recency"].gt(recency_75),
+    ]
+    segment_labels = [
+        "Champions",
+        "At-Risk Repeat",
+        "Loyal Repeat",
+        "High-Value One-Time",
+        "Recent One-Time",
+        "Hibernating One-Time",
+    ]
+    rfm["segment"] = np.select(
+        segment_conditions,
+        segment_labels,
+        default="Regular One-Time",
+    )
+
+    segment_summary = (
+        rfm.groupby("segment", as_index=False, observed=True)
+        .agg(
+            customers=("customer_unique_id", "nunique"),
+            total_payment=("monetary", "sum"),
+            average_frequency=("frequency", "mean"),
+            average_payment=("monetary", "mean"),
+            median_recency=("recency", "median"),
+        )
+        .sort_values("total_payment", ascending=False)
+    )
+    segment_summary["customer_share"] = (
+        segment_summary["customers"] / segment_summary["customers"].sum()
+    )
+    total_payment = segment_summary["total_payment"].sum()
+    segment_summary["payment_share"] = (
+        segment_summary["total_payment"] / total_payment
+        if total_payment
+        else 0.0
+    )
+
+    cohort_base = delivered_orders[
+        ["customer_unique_id", "order_id", "order_purchase_timestamp"]
+    ].copy()
+    cohort_base["order_month"] = (
+        cohort_base["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
+    )
+    acquisition = (
+        cohort_base.groupby("customer_unique_id", as_index=False, observed=True)[
+            "order_month"
+        ]
+        .min()
+        .rename(columns={"order_month": "cohort_month"})
+    )
+    cohort_base = cohort_base.merge(
+        acquisition,
+        on="customer_unique_id",
+        validate="many_to_one",
+    )
+    cohort_base["cohort_index"] = (
+        (
+            cohort_base["order_month"].dt.year
+            - cohort_base["cohort_month"].dt.year
+        )
+        * 12
+        + cohort_base["order_month"].dt.month
+        - cohort_base["cohort_month"].dt.month
+    )
+    cohort_counts = (
+        cohort_base.groupby(
+            ["cohort_month", "cohort_index"],
+            observed=True,
+        )["customer_unique_id"]
+        .nunique()
+        .unstack(fill_value=0)
+        .sort_index()
+    )
+    retention = cohort_counts.div(cohort_counts[0], axis=0)
+
+    def weighted_retention(month_index: int) -> float:
+        if month_index not in cohort_counts.columns:
+            return np.nan
+        latest_cohort = cohort_counts.index.max()
+        eligible = cohort_counts.index <= (
+            latest_cohort - pd.DateOffset(months=month_index)
+        )
+        eligible_counts = cohort_counts.loc[eligible]
+        denominator = eligible_counts[0].sum()
+        if denominator == 0:
+            return np.nan
+        return float(eligible_counts[month_index].sum() / denominator)
+
+    repeat_customer_rate = float(rfm["frequency"].ge(2).mean())
+    month1_retention = weighted_retention(1)
+    month3_retention = weighted_retention(3)
+
+    # Maksimal 14 kohort matang menjaga heatmap ringkas. Pada data default,
+    # rentang ini sama dengan notebook: 2017-01 sampai 2018-02.
+    heatmap_columns = [
+        month_index for month_index in range(7) if month_index in retention.columns
+    ]
+    latest_cohort = retention.index.max()
+    mature_cohorts = retention.index <= (
+        latest_cohort - pd.DateOffset(months=6)
+    )
+    cohort_view = retention.loc[mature_cohorts, heatmap_columns].tail(14)
+    if cohort_view.empty:
+        cohort_view = retention.loc[:, heatmap_columns].tail(14)
+
+    return {
+        "segment_summary": segment_summary,
+        "cohort_view": cohort_view,
+        "repeat_customer_rate": repeat_customer_rate,
+        "month1_retention": month1_retention,
+        "month3_retention": month3_retention,
+    }
 
 
 def make_customer_map(points: pd.DataFrame, mode: str) -> folium.Map:
@@ -987,7 +1289,7 @@ def make_customer_map(points: pd.DataFrame, mode: str) -> folium.Map:
                 f"{html.escape(format_state_name(row.customer_state))}</b><br>"
                 f"Customer: {format_integer(row.customers)}<br>"
                 f"Pesanan: {format_integer(row.orders)}<br>"
-                f"GMV: {format_currency(row.gmv)}"
+                f"Product GMV: {format_currency(row.gmv)}"
             )
             folium.CircleMarker(
                 location=[row.customer_lat, row.customer_lng],
@@ -1028,12 +1330,12 @@ def create_order_export(filtered: pd.DataFrame) -> bytes:
     ]
     dimensions = [column for column in dimensions if column in filtered.columns]
     export = (
-        filtered.groupby(dimensions, dropna=False, as_index=False)
+        filtered.groupby(dimensions, dropna=False, as_index=False, observed=True)
         .agg(
             item_count=("order_item_id", "count"),
-            product_revenue=("price", "sum"),
+            product_gmv=("gmv", "sum"),
             freight_value=("freight_value", "sum"),
-            gmv=("gmv", "sum"),
+            order_value=("order_value", "sum"),
             categories=("category", lambda values: " | ".join(sorted(set(values)))),
         )
         .sort_values("order_purchase_timestamp", ascending=False)
@@ -1070,7 +1372,7 @@ def main() -> None:
         for name in missing:
             st.write(f"- `{name}`")
         st.info(
-            "Letakkan file di folder yang sama dengan app_2.py, folder data/, "
+            "Letakkan file di folder yang sama dengan app.py, folder data/, "
             "folder project_sources/, atau unggah melalui sidebar."
         )
         st.stop()
@@ -1080,6 +1382,17 @@ def main() -> None:
         st.error("Terdapat kolom wajib yang tidak ditemukan:")
         for error in column_errors:
             st.write(f"- {error}")
+        st.stop()
+
+    completeness_errors = validate_dataset_completeness(datasets)
+    if completeness_errors:
+        st.error("Terdapat dataset yang tampaknya tidak lengkap atau terpotong:")
+        for error in completeness_errors:
+            st.write(f"- {error}")
+        st.info(
+            "Pastikan Git LFS sudah selesai (`git lfs pull`) atau unggah ulang "
+            "CSV Olist yang lengkap sebelum menjalankan dashboard."
+        )
         st.stop()
 
     model = build_data_model(fingerprint, datasets)
@@ -1153,7 +1466,7 @@ def main() -> None:
         st.warning("Tidak ada data yang cocok dengan kombinasi filter saat ini.")
         st.stop()
 
-    order_view = filtered.drop_duplicates("order_id").copy()
+    order_view = filtered.drop_duplicates("order_id")
     span_days = max((end_ts - start_ts).days + 1, 1)
     previous_end = start_ts - pd.Timedelta(days=1)
     previous_start = previous_end - pd.Timedelta(days=span_days - 1)
@@ -1169,13 +1482,15 @@ def main() -> None:
     previous_orders = previous["order_id"].nunique()
 
     current_revenue = float(filtered["gmv"].sum())
+    current_order_value = float(filtered["order_value"].sum())
     current_orders = int(filtered["order_id"].nunique())
     current_customers = int(filtered["customer_unique_id"].nunique())
-    current_aov = current_revenue / current_orders if current_orders else 0
+    current_aov = current_order_value / current_orders if current_orders else 0
     current_rating = float(order_view["review_score"].mean())
     previous_revenue = float(previous["gmv"].sum())
+    previous_order_value = float(previous["order_value"].sum())
     previous_customers = int(previous["customer_unique_id"].nunique()) if not previous.empty else 0
-    previous_aov = previous_revenue / previous_orders if previous_orders else np.nan
+    previous_aov = previous_order_value / previous_orders if previous_orders else np.nan
 
     # Trend ringkas untuk sparkline KPI.
     if span_days > 180:
@@ -1187,16 +1502,17 @@ def main() -> None:
 
     kpi_trend = (
         filtered.assign(_kpi_period=kpi_period)
-        .groupby("_kpi_period", as_index=False)
+        .groupby("_kpi_period", as_index=False, observed=True)
         .agg(
             GMV=("gmv", "sum"),
+            OrderValue=("order_value", "sum"),
             Pesanan=("order_id", "nunique"),
             Customer=("customer_unique_id", "nunique"),
         )
         .sort_values("_kpi_period")
     )
     kpi_trend["AOV"] = (
-        kpi_trend["GMV"]
+        kpi_trend["OrderValue"]
         / kpi_trend["Pesanan"].replace(0, np.nan)
     )
 
@@ -1212,7 +1528,7 @@ def main() -> None:
                 )
             )
         )
-        .groupby("_kpi_period", as_index=False)
+        .groupby("_kpi_period", as_index=False, observed=True)
         .agg(Rating=("review_score", "mean"))
         .sort_values("_kpi_period")
     )
@@ -1248,7 +1564,7 @@ def main() -> None:
             format_currency(current_revenue),
             COLORS["blue"],
             delta=gmv_delta,
-            note=None if gmv_delta else "Belum ada periode pembanding",
+            note="Nilai produk, tidak termasuk freight",
             spark=gmv_spark,
             key="gmv",
         )
@@ -1281,7 +1597,7 @@ def main() -> None:
             format_currency(current_aov),
             COLORS["emerald"],
             delta=aov_delta,
-            note=None if aov_delta else "Belum ada periode pembanding",
+            note="Harga produk + freight per pesanan",
             spark=aov_spark,
             key="aov",
         )
@@ -1297,12 +1613,27 @@ def main() -> None:
             key="rating",
         )
 
-    tabs = st.tabs(["Ringkasan", "Customer & Peta", "Produk & Seller", "Layanan & Pembayaran"])
+    active_section = st.segmented_control(
+        "Bagian dashboard",
+        [
+            "Ringkasan",
+            "Customer & Peta",
+            "Customer Value",
+            "Produk & Seller",
+            "Layanan & Pembayaran",
+        ],
+        default="Ringkasan",
+        selection_mode="single",
+        required=True,
+        key="dashboard_section",
+        label_visibility="collapsed",
+        width="stretch",
+    )
 
     # ------------------------------------------------------------------ Ringkasan
-    with tabs[0]:
-        top_category = filtered.groupby("category")["gmv"].sum().idxmax()
-        top_state = filtered.groupby("customer_state")["gmv"].sum().idxmax()
+    if active_section == "Ringkasan":
+        top_category = filtered.groupby("category", observed=True)["gmv"].sum().idxmax()
+        top_state = filtered.groupby("customer_state", observed=True)["gmv"].sum().idxmax()
         delivered = order_view.dropna(subset=["is_on_time"])
         on_time_rate = delivered["is_on_time"].mean() * 100 if not delivered.empty else np.nan
         insight = (
@@ -1314,47 +1645,51 @@ def main() -> None:
 
         left, right = st.columns([1.65, 1], gap="large")
         with left:
-            section_heading("Tren GMV dan pesanan", "Granularitas menyesuaikan panjang periode yang dipilih.")
-            if span_days > 180:
-                period = filtered["order_purchase_timestamp"].dt.to_period("M").dt.to_timestamp()
-                period_label = "Bulan"
-            elif span_days > 60:
-                period = filtered["order_purchase_timestamp"].dt.to_period("W").dt.start_time
-                period_label = "Minggu"
-            else:
-                period = filtered["order_purchase_timestamp"].dt.normalize()
-                period_label = "Tanggal"
-            trend = (
-                filtered.assign(period=period)
-                .groupby("period", as_index=False)
-                .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"))
+            section_heading(
+                "Tren product GMV dan pesanan",
+                "GMV hanya mencakup harga produk; granularitas mengikuti periode.",
             )
+            period_label = (
+                "Bulan" if span_days > 180 else "Minggu" if span_days > 60 else "Tanggal"
+            )
+            trend = kpi_trend.rename(columns={"_kpi_period": "period"})
             fig = go.Figure()
-            fig.add_trace(go.Scatter(x=trend["period"], y=trend["GMV"], name="GMV", mode="lines", line=dict(color=COLORS["blue"], width=3), fill="tozeroy", fillcolor="rgba(37,99,235,0.16)", hovertemplate="%{x|%d %b %Y}<br>GMV R$ %{y:,.2f}<extra></extra>"))
+            fig.add_trace(go.Scatter(x=trend["period"], y=trend["GMV"], name="Product GMV", mode="lines", line=dict(color=COLORS["blue"], width=3), fill="tozeroy", fillcolor="rgba(37,99,235,0.16)", hovertemplate="%{x|%d %b %Y}<br>Product GMV R$ %{y:,.2f}<extra></extra>"))
             fig.add_trace(go.Scatter(x=trend["period"], y=trend["Pesanan"], name="Pesanan", mode="lines+markers", yaxis="y2", line=dict(color=COLORS["cyan"], width=2), marker=dict(size=5), hovertemplate="%{x|%d %b %Y}<br>%{y:,.0f} pesanan<extra></extra>"))
-            fig.update_layout(yaxis=dict(title="GMV (R$)"), yaxis2=dict(title="Pesanan", overlaying="y", side="right", showgrid=False), xaxis_title=period_label)
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            fig.update_layout(yaxis=dict(title="Product GMV (R$)"), yaxis2=dict(title="Pesanan", overlaying="y", side="right", showgrid=False), xaxis_title=period_label)
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         with right:
             section_heading("Komposisi status", "Jumlah pesanan unik menurut status terakhir.")
-            status_summary = order_view["order_status"].value_counts().rename_axis("Status").reset_index(name="Pesanan")
+            status_summary = (
+                order_view["order_status"]
+                .value_counts()
+                .loc[lambda values: values.gt(0)]
+                .rename_axis("Status")
+                .reset_index(name="Pesanan")
+            )
             fig = px.pie(status_summary, names="Status", values="Pesanan", hole=.67, color_discrete_sequence=[COLORS["blue"], COLORS["cyan"], COLORS["violet"], COLORS["amber"], COLORS["rose"], COLORS["emerald"]])
             fig.update_traces(textposition="outside", textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>%{value:,.0f} pesanan<br>%{percent}<extra></extra>")
             fig.add_annotation(text=f"<b>{format_integer(current_orders)}</b><br><span style='font-size:11px'>pesanan</span>", x=.5, y=.5, showarrow=False, font=dict(color=COLORS["text"], size=18))
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         left, right = st.columns(2, gap="large")
         with left:
-            section_heading("Kategori penyumbang GMV", "Sepuluh kategori dengan nilai produk dan freight tertinggi.")
-            category_revenue = filtered.groupby("category", as_index=False)["gmv"].sum().nlargest(10, "gmv").sort_values("gmv")
-            fig = px.bar(category_revenue, x="gmv", y="category", orientation="h", color="gmv", color_continuous_scale=["#93C5FD", "#1D4ED8"], labels={"gmv": "GMV (R$)", "category": ""})
+            section_heading(
+                "Kategori penyumbang product GMV",
+                "Sepuluh kategori dengan total harga produk tertinggi; freight tidak disertakan.",
+            )
+            category_revenue = filtered.groupby(
+                "category", as_index=False, observed=True
+            )["gmv"].sum().nlargest(10, "gmv").sort_values("gmv")
+            fig = px.bar(category_revenue, x="gmv", y="category", orientation="h", color="gmv", color_continuous_scale=["#93C5FD", "#1D4ED8"], labels={"gmv": "Product GMV (R$)", "category": ""})
             fig.update_layout(coloraxis_showscale=False)
-            fig.update_traces(hovertemplate="%{y}<br>GMV R$ %{x:,.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            fig.update_traces(hovertemplate="%{y}<br>Product GMV R$ %{x:,.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
         with right:
-            section_heading("Kontribusi state customer", "Sepuluh state dengan GMV tertinggi.")
+            section_heading("Kontribusi state customer", "Sepuluh state dengan product GMV tertinggi.")
             state_revenue = (
-                filtered.groupby("customer_state", as_index=False)
+                filtered.groupby("customer_state", as_index=False, observed=True)
                 .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"))
                 .nlargest(10, "GMV")
             )
@@ -1367,7 +1702,7 @@ def main() -> None:
                 orientation="h",
                 color="Pesanan",
                 color_continuous_scale=["#67E8F9", "#0891B2"],
-                labels={"State": "", "GMV": "GMV (R$)"},
+                labels={"State": "", "GMV": "Product GMV (R$)"},
             )
             fig.update_layout(
                 coloraxis_colorbar=dict(title="Pesanan"),
@@ -1378,21 +1713,29 @@ def main() -> None:
                 customdata=state_revenue[["customer_state", "Pesanan"]],
                 hovertemplate=(
                     "<b>%{y}</b><br>Kode: %{customdata[0]}<br>"
-                    "GMV R$ %{x:,.2f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>"
+                    "Product GMV R$ %{x:,.2f}<br>Pesanan %{customdata[1]:,.0f}<extra></extra>"
                 ),
             )
-            st.plotly_chart(style_figure(fig, 430), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 430), width="stretch", config={"displayModeBar": False})
 
     # ----------------------------------------------------------- Customer dan Peta
-    with tabs[1]:
-        map_orders = order_view.dropna(subset=["customer_lat", "customer_lng"]).copy()
+    elif active_section == "Customer & Peta":
+        map_orders = order_view.dropna(subset=["customer_lat", "customer_lng"])
         map_points = (
-            map_orders.groupby(["customer_state", "customer_city", "customer_lat", "customer_lng"], as_index=False)
+            map_orders.groupby(
+                ["customer_state", "customer_city", "customer_lat", "customer_lng"],
+                as_index=False,
+                observed=True,
+            )
             .agg(customers=("customer_unique_id", "nunique"), orders=("order_id", "nunique"))
         )
-        order_gmv = filtered.groupby("order_id", as_index=False)["gmv"].sum()
+        order_gmv = filtered.groupby("order_id", as_index=False, observed=True)["gmv"].sum()
         map_gmv = map_orders[["order_id", "customer_state", "customer_city", "customer_lat", "customer_lng"]].merge(order_gmv, on="order_id", how="left")
-        map_gmv = map_gmv.groupby(["customer_state", "customer_city", "customer_lat", "customer_lng"], as_index=False)["gmv"].sum()
+        map_gmv = map_gmv.groupby(
+            ["customer_state", "customer_city", "customer_lat", "customer_lng"],
+            as_index=False,
+            observed=True,
+        )["gmv"].sum()
         map_points = map_points.merge(map_gmv, on=["customer_state", "customer_city", "customer_lat", "customer_lng"], how="left")
 
         control_1, control_2, spacer = st.columns([1, 1.2, 3.4])
@@ -1420,13 +1763,18 @@ def main() -> None:
 
         left, right = st.columns([1.25, 1], gap="large")
         with left:
-            section_heading("Profil wilayah", "GMV, pesanan, dan customer unik pada setiap state.")
+            section_heading("Profil wilayah", "Product GMV, pesanan, dan customer unik pada setiap state.")
             state_profile = (
-                filtered.groupby("customer_state", as_index=False)
-                .agg(GMV=("gmv", "sum"), Pesanan=("order_id", "nunique"), Customer=("customer_unique_id", "nunique"))
+                filtered.groupby("customer_state", as_index=False, observed=True)
+                .agg(
+                    GMV=("gmv", "sum"),
+                    NilaiPesanan=("order_value", "sum"),
+                    Pesanan=("order_id", "nunique"),
+                    Customer=("customer_unique_id", "nunique"),
+                )
                 .sort_values("GMV", ascending=False)
             )
-            state_profile["AOV"] = state_profile["GMV"] / state_profile["Pesanan"]
+            state_profile["AOV"] = state_profile["NilaiPesanan"] / state_profile["Pesanan"]
             display_state = state_profile.copy()
             display_state.insert(
                 0,
@@ -1441,12 +1789,16 @@ def main() -> None:
             display_state = display_state[
                 ["State", "Kode", "GMV", "Pesanan", "Customer", "AOV"]
             ]
-            st.dataframe(display_state, use_container_width=True, hide_index=True, height=380)
+            st.dataframe(display_state, width="stretch", hide_index=True, height=380)
         with right:
-            section_heading("Retensi customer", "Segmentasi berdasarkan seluruh riwayat customer, bukan hanya periode filter.")
+            section_heading(
+                "Frekuensi pembelian customer",
+                "Segmentasi menurut delivered order sepanjang riwayat; bukan cohort retention.",
+            )
             customer_segments = (
                 order_view.drop_duplicates("customer_unique_id")["customer_segment"]
                 .value_counts()
+                .loc[lambda values: values.gt(0)]
                 .rename_axis("Segmen")
                 .reset_index(name="Customer")
             )
@@ -1467,6 +1819,7 @@ def main() -> None:
                 color_discrete_map={
                     "One-time customer": COLORS["blue"],
                     "Repeat customer": COLORS["emerald"],
+                    "Belum ada pesanan selesai": COLORS["muted"],
                 },
             )
             fig.update_traces(
@@ -1499,28 +1852,234 @@ def main() -> None:
                 ),
                 margin=dict(l=20, r=20, t=25, b=75),
             )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig, width="stretch", config={"displayModeBar": False})
+
+    # ------------------------------------------------------------- Customer Value
+    elif active_section == "Customer Value":
+        customer_value = build_customer_value_analysis(order_view, payments)
+        if customer_value is None:
+            st.info(
+                "RFM dan cohort retention memerlukan minimal satu pesanan "
+                "berstatus delivered pada hasil filter."
+            )
+        else:
+            segment_summary = customer_value["segment_summary"]
+            cohort_view = customer_value["cohort_view"]
+            repeat_rate = customer_value["repeat_customer_rate"]
+            month1_retention = customer_value["month1_retention"]
+            month3_retention = customer_value["month3_retention"]
+            top_segment = segment_summary.iloc[0]
+
+            section_heading(
+                "Customer Value",
+                "RFM mengukur recency, frequency, dan total payment; cohort menunjukkan pembelian ulang sejak bulan akuisisi.",
+            )
+            metric_columns = st.columns(4, gap="small")
+            with metric_columns[0]:
+                st.metric(
+                    "Repeat customer",
+                    f"{repeat_rate:.2%}",
+                    help="Customer dengan minimal dua delivered order pada hasil filter.",
+                )
+            with metric_columns[1]:
+                st.metric(
+                    "Retention M+1",
+                    (
+                        f"{month1_retention:.2%}"
+                        if np.isfinite(month1_retention)
+                        else "N/A"
+                    ),
+                    help="Weighted retention bulan pertama dari kohort yang sudah matang.",
+                )
+            with metric_columns[2]:
+                st.metric(
+                    "Retention M+3",
+                    (
+                        f"{month3_retention:.2%}"
+                        if np.isfinite(month3_retention)
+                        else "N/A"
+                    ),
+                    help="Weighted retention bulan ketiga dari kohort yang sudah matang.",
+                )
+            with metric_columns[3]:
+                st.metric(
+                    "Kontributor payment",
+                    str(top_segment["segment"]),
+                    f"{top_segment['payment_share']:.1%} total payment",
+                    delta_color="off",
+                )
+
+            left, right = st.columns([1, 1.15], gap="large")
+            with left:
+                section_heading(
+                    "Komposisi segmen RFM",
+                    "Bandingkan proporsi customer dengan kontribusi total payment.",
+                )
+                segment_plot = segment_summary[
+                    ["segment", "customer_share", "payment_share"]
+                ].melt(
+                    id_vars="segment",
+                    var_name="metric",
+                    value_name="share",
+                )
+                segment_plot["metric"] = segment_plot["metric"].map(
+                    {
+                        "customer_share": "Porsi customer",
+                        "payment_share": "Porsi payment",
+                    }
+                )
+                segment_order = segment_summary.sort_values("total_payment")[
+                    "segment"
+                ].tolist()
+                fig = px.bar(
+                    segment_plot,
+                    x="share",
+                    y="segment",
+                    color="metric",
+                    orientation="h",
+                    barmode="group",
+                    category_orders={"segment": segment_order},
+                    color_discrete_map={
+                        "Porsi customer": COLORS["blue"],
+                        "Porsi payment": COLORS["emerald"],
+                    },
+                    labels={
+                        "share": "Porsi",
+                        "segment": "",
+                        "metric": "",
+                    },
+                )
+                fig.update_xaxes(tickformat=".0%")
+                fig.update_traces(
+                    hovertemplate="<b>%{y}</b><br>%{fullData.name}: %{x:.1%}<extra></extra>"
+                )
+                st.plotly_chart(
+                    style_figure(fig, 475),
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+
+            with right:
+                section_heading(
+                    "Cohort retention bulanan",
+                    "Persentase customer yang kembali pada bulan ke-0 sampai ke-6 sejak pembelian pertama.",
+                )
+                heatmap = go.Figure(
+                    data=go.Heatmap(
+                        z=cohort_view.to_numpy(),
+                        x=[f"M+{column}" for column in cohort_view.columns],
+                        y=[
+                            cohort.strftime("%Y-%m")
+                            for cohort in cohort_view.index
+                        ],
+                        colorscale=[
+                            [0, COLORS["surface_2"]],
+                            [0.45, COLORS["blue"]],
+                            [1, COLORS["cyan"]],
+                        ],
+                        zmin=0,
+                        zmax=0.02,
+                        text=np.vectorize(lambda value: f"{value:.1%}")(
+                            cohort_view.to_numpy()
+                        ),
+                        texttemplate="%{text}",
+                        textfont={"size": 10},
+                        colorbar={
+                            "title": "Retention",
+                            "tickformat": ".1%",
+                            "thickness": 12,
+                        },
+                        hovertemplate=(
+                            "Kohort %{y}<br>%{x}: %{z:.2%}<extra></extra>"
+                        ),
+                    )
+                )
+                heatmap = style_figure(heatmap, 475)
+                heatmap.update_yaxes(autorange="reversed")
+                heatmap.update_layout(
+                    margin=dict(l=60, r=25, t=38, b=45),
+                    xaxis_title="Bulan sejak akuisisi",
+                    yaxis_title="Bulan akuisisi",
+                )
+                st.plotly_chart(
+                    heatmap,
+                    width="stretch",
+                    config={"displayModeBar": False},
+                )
+
+            with st.expander("Detail segmen RFM", expanded=False):
+                segment_table = segment_summary.rename(
+                    columns={
+                        "segment": "Segmen",
+                        "customers": "Customer",
+                        "total_payment": "Total payment",
+                        "average_frequency": "Frekuensi rata-rata",
+                        "average_payment": "Payment rata-rata",
+                        "median_recency": "Median recency (hari)",
+                        "customer_share": "Porsi customer",
+                        "payment_share": "Porsi payment",
+                    }
+                ).copy()
+                segment_table["Total payment"] = segment_table[
+                    "Total payment"
+                ].map(format_currency)
+                segment_table["Payment rata-rata"] = segment_table[
+                    "Payment rata-rata"
+                ].map(format_currency)
+                segment_table["Frekuensi rata-rata"] = segment_table[
+                    "Frekuensi rata-rata"
+                ].map(lambda value: f"{value:.2f}")
+                segment_table["Median recency (hari)"] = segment_table[
+                    "Median recency (hari)"
+                ].map(lambda value: f"{value:.0f}")
+                segment_table["Porsi customer"] = segment_table[
+                    "Porsi customer"
+                ].map(lambda value: f"{value:.1%}")
+                segment_table["Porsi payment"] = segment_table[
+                    "Porsi payment"
+                ].map(lambda value: f"{value:.1%}")
+                st.dataframe(
+                    segment_table,
+                    width="stretch",
+                    hide_index=True,
+                )
+            st.caption(
+                "RFM bersifat heuristik dan mengikuti filter aktif. Untuk filter kategori "
+                "atau state seller, order yang cocok dipilih lebih dahulu; monetary tetap "
+                "mencakup seluruh pembayaran order tersebut."
+            )
 
     # -------------------------------------------------------------- Produk/Seller
-    with tabs[2]:
+    elif active_section == "Produk & Seller":
+        category_rating = (
+            filtered.drop_duplicates(["order_id", "category"])
+            .groupby("category", as_index=False, observed=True)
+            .agg(Rating=("review_score", "mean"))
+        )
         category_profile = (
-            filtered.groupby("category", as_index=False)
-            .agg(GMV=("gmv", "sum"), Unit=("order_item_id", "count"), Pesanan=("order_id", "nunique"), Customer=("customer_unique_id", "nunique"), Rating=("review_score", "mean"))
+            filtered.groupby("category", as_index=False, observed=True)
+            .agg(
+                GMV=("gmv", "sum"),
+                Unit=("order_item_id", "count"),
+                Pesanan=("order_id", "nunique"),
+                Customer=("customer_unique_id", "nunique"),
+            )
+            .merge(category_rating, on="category", how="left", validate="one_to_one")
         )
         category_profile["GMV per Unit"] = category_profile["GMV"] / category_profile["Unit"]
 
         left, right = st.columns([1.35, 1], gap="large")
         with left:
             section_heading("Matriks portofolio kategori", "Ukuran bubble menunjukkan jumlah pesanan; warna menunjukkan rating.")
-            fig = px.scatter(category_profile, x="Unit", y="GMV", size="Pesanan", color="Rating", hover_name="category", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]], size_max=52, labels={"Unit": "Unit terjual", "GMV": "GMV (R$)"})
-            fig.update_traces(hovertemplate="<b>%{hovertext}</b><br>Unit %{x:,.0f}<br>GMV R$ %{y:,.2f}<br>Rating %{marker.color:.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 450), use_container_width=True, config={"displayModeBar": False})
+            fig = px.scatter(category_profile, x="Unit", y="GMV", size="Pesanan", color="Rating", hover_name="category", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]], size_max=52, labels={"Unit": "Unit terjual", "GMV": "Product GMV (R$)"})
+            fig.update_traces(hovertemplate="<b>%{hovertext}</b><br>Unit %{x:,.0f}<br>Product GMV R$ %{y:,.2f}<br>Rating %{marker.color:.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 450), width="stretch", config={"displayModeBar": False})
         with right:
-            section_heading("Kategori bernilai tinggi", "Peringkat berdasarkan GMV rata-rata per unit.")
+            section_heading("Kategori bernilai tinggi", "Peringkat berdasarkan product GMV rata-rata per unit.")
             high_value = category_profile[category_profile["Unit"].ge(10)].nlargest(12, "GMV per Unit").sort_values("GMV per Unit")
-            fig = px.bar(high_value, x="GMV per Unit", y="category", orientation="h", color="Rating", color_continuous_scale=["#FDE68A", COLORS["emerald"]], labels={"category": "", "GMV per Unit": "GMV per unit (R$)"})
-            fig.update_traces(hovertemplate="%{y}<br>GMV/unit R$ %{x:,.2f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 450), use_container_width=True, config={"displayModeBar": False})
+            fig = px.bar(high_value, x="GMV per Unit", y="category", orientation="h", color="Rating", color_continuous_scale=["#FDE68A", COLORS["emerald"]], labels={"category": "", "GMV per Unit": "Product GMV per unit (R$)"})
+            fig.update_traces(hovertemplate="%{y}<br>Product GMV/unit R$ %{x:,.2f}<extra></extra>")
+            st.plotly_chart(style_figure(fig, 450), width="stretch", config={"displayModeBar": False})
 
         left, right = st.columns(2, gap="large")
         with left:
@@ -1528,13 +2087,20 @@ def main() -> None:
                 "Produk terlaris",
                 "Dataset publik Olist tidak menyediakan nama produk; label menggunakan kategori dan ID singkat.",
             )
+            product_rating = (
+                filtered.drop_duplicates(["order_id", "product_id"])
+                .groupby("product_id", as_index=False, observed=True)
+                .agg(Rating=("review_score", "mean"))
+            )
             product_profile = (
-                filtered.groupby(["product_id", "category"], as_index=False)
+                filtered.groupby(
+                    ["product_id", "category"], as_index=False, observed=True
+                )
                 .agg(
                     GMV=("gmv", "sum"),
                     Unit=("order_item_id", "count"),
-                    Rating=("review_score", "mean"),
                 )
+                .merge(product_rating, on="product_id", how="left", validate="many_to_one")
                 .nlargest(12, "GMV")
                 .sort_values("GMV")
             )
@@ -1552,7 +2118,7 @@ def main() -> None:
                 orientation="h",
                 color="GMV",
                 color_continuous_scale=["#1D4ED8", COLORS["blue"], COLORS["violet"]],
-                labels={"GMV": "GMV (R$)", "Produk": ""},
+                labels={"GMV": "Product GMV (R$)", "Produk": ""},
             )
             fig.update_layout(
                 coloraxis_showscale=False,
@@ -1566,20 +2132,20 @@ def main() -> None:
                 hovertemplate=(
                     "<b>%{y}</b><br>Kategori: %{customdata[1]}"
                     "<br>ID produk: %{customdata[0]}"
-                    "<br>GMV R$ %{x:,.2f}"
+                    "<br>Product GMV R$ %{x:,.2f}"
                     "<br>Unit %{customdata[2]:,.0f}"
                     "<br>Rating %{customdata[3]:.2f}<extra></extra>"
                 ),
             )
             st.plotly_chart(
                 style_figure(fig, 480),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False},
             )
         with right:
-            section_heading("Kekuatan seller per state", "Perbandingan seller aktif, GMV, dan jumlah pesanan.")
+            section_heading("Kekuatan seller per state", "Perbandingan seller aktif, product GMV, dan jumlah pesanan.")
             seller_profile = (
-                filtered.groupby("seller_state", as_index=False)
+                filtered.groupby("seller_state", as_index=False, observed=True)
                 .agg(
                     GMV=("gmv", "sum"),
                     Seller=("seller_id", "nunique"),
@@ -1594,28 +2160,28 @@ def main() -> None:
                 y="GMV",
                 color="Seller",
                 color_continuous_scale=["#C4B5FD", "#6D28D9"],
-                labels={"State": "State seller", "GMV": "GMV (R$)"},
+                labels={"State": "State seller", "GMV": "Product GMV (R$)"},
             )
             fig.update_xaxes(tickangle=-32, automargin=True)
             fig.update_traces(
                 customdata=seller_profile[["seller_state", "Seller", "Pesanan"]],
                 hovertemplate=(
                     "<b>%{x}</b><br>Kode: %{customdata[0]}"
-                    "<br>GMV R$ %{y:,.2f}"
+                    "<br>Product GMV R$ %{y:,.2f}"
                     "<br>Seller %{customdata[1]:,.0f}"
                     "<br>Pesanan %{customdata[2]:,.0f}<extra></extra>"
                 ),
             )
             st.plotly_chart(
                 style_figure(fig, 460),
-                use_container_width=True,
+                width="stretch",
                 config={"displayModeBar": False},
             )
 
     # ---------------------------------------------------- Layanan dan pembayaran
-    with tabs[3]:
-        reviewed = order_view.dropna(subset=["review_score"]).copy()
-        delivered_orders = order_view.dropna(subset=["delivery_days"]).copy()
+    elif active_section == "Layanan & Pembayaran":
+        reviewed = order_view.dropna(subset=["review_score"])
+        delivered_orders = order_view.dropna(subset=["delivery_days"])
         valid_delivery = delivered_orders[delivered_orders["delivery_days"].between(0, 90)]
 
         left, middle, right = st.columns(3, gap="small")
@@ -1632,7 +2198,7 @@ def main() -> None:
 
         service_trend = (
             order_view.assign(_service_period=service_period)
-            .groupby("_service_period", as_index=False)
+            .groupby("_service_period", as_index=False, observed=True)
             .agg(
                 AverageDelivery=("delivery_days", "mean"),
                 LateRate=("delivery_delay_days", lambda values: (values > 0).mean() * 100),
@@ -1676,24 +2242,29 @@ def main() -> None:
         left, right = st.columns(2, gap="large")
         with left:
             section_heading("Distribusi rating", "Jumlah pesanan pada setiap skor ulasan.")
-            rating_dist = reviewed.assign(Rating=reviewed["review_score"].round().astype(int)).groupby("Rating", as_index=False).size().rename(columns={"size": "Pesanan"})
+            rating_dist = (
+                reviewed.assign(Rating=reviewed["review_score"].round().astype(int))
+                .groupby("Rating", as_index=False, observed=True)
+                .size()
+                .rename(columns={"size": "Pesanan"})
+            )
             complete_rating = pd.DataFrame({"Rating": [1, 2, 3, 4, 5]}).merge(rating_dist, on="Rating", how="left").fillna(0)
             fig = px.bar(complete_rating, x="Rating", y="Pesanan", color="Rating", color_continuous_scale=[COLORS["rose"], COLORS["amber"], COLORS["emerald"]])
             fig.update_layout(coloraxis_showscale=False)
             fig.update_traces(hovertemplate="Rating %{x}<br>%{y:,.0f} pesanan<extra></extra>")
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
         with right:
             section_heading("Distribusi waktu pengiriman", "Outlier di atas 90 hari dikeluarkan dari grafik, tetapi tetap masuk KPI.")
             fig = px.histogram(valid_delivery, x="delivery_days", nbins=36, color_discrete_sequence=[COLORS["blue"]], labels={"delivery_days": "Waktu pengiriman (hari)", "count": "Pesanan"})
             if np.isfinite(average_delivery):
                 fig.add_vline(x=average_delivery, line_dash="dash", line_color=COLORS["rose"], annotation_text=f"Rata-rata {average_delivery:.1f} hari", annotation_position="top right")
             fig.update_traces(hovertemplate="Waktu %{x:.1f} hari<br>%{y:,.0f} pesanan<extra></extra>")
-            st.plotly_chart(style_figure(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 390), width="stretch", config={"displayModeBar": False})
 
         selected_order_ids = set(order_view["order_id"])
         filtered_payments = payments[payments["order_id"].isin(selected_order_ids)]
         payment_profile = (
-            filtered_payments.groupby("payment_label", as_index=False)
+            filtered_payments.groupby("payment_label", as_index=False, observed=True)
             .agg(Nilai=("payment_value", "sum"), Pesanan=("order_id", "nunique"), Transaksi=("payment_value", "size"))
             .sort_values("Nilai", ascending=False)
         )
@@ -1703,33 +2274,61 @@ def main() -> None:
             fig = px.bar(payment_profile.sort_values("Nilai"), x="Nilai", y="payment_label", orientation="h", color="Nilai", color_continuous_scale=["#60A5FA", "#1E40AF"], labels={"payment_label": "", "Nilai": "Nilai pembayaran (R$)"})
             fig.update_layout(coloraxis_showscale=False)
             fig.update_traces(customdata=payment_profile.sort_values("Nilai")[["Pesanan", "Transaksi"]], hovertemplate="%{y}<br>Nilai R$ %{x:,.2f}<br>Pesanan %{customdata[0]:,.0f}<br>Transaksi %{customdata[1]:,.0f}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
         with right:
             section_heading("Porsi metode pembayaran", "Proporsi berdasarkan nilai pembayaran, bukan jumlah transaksi.")
             fig = px.pie(payment_profile, names="payment_label", values="Nilai", hole=.62, color_discrete_sequence=[COLORS["blue"], COLORS["cyan"], COLORS["violet"], COLORS["amber"], COLORS["emerald"]])
             fig.update_traces(textinfo="percent+label", marker=dict(line=dict(color="white", width=3)), hovertemplate="%{label}<br>R$ %{value:,.2f}<br>%{percent}<extra></extra>")
-            st.plotly_chart(style_figure(fig, 400), use_container_width=True, config={"displayModeBar": False})
-        if categories:
-            st.caption("Catatan: ketika kategori produk difilter, nilai pembayaran mencakup seluruh nilai pesanan yang memiliki kategori tersebut.")
+            st.plotly_chart(style_figure(fig, 400), width="stretch", config={"displayModeBar": False})
+        if categories or seller_states:
+            st.caption(
+                "Catatan: filter kategori atau state seller memilih order yang cocok; "
+                "nilai pembayaran tetap mencakup seluruh pembayaran order tersebut."
+            )
 
     st.markdown("---")
     footer_left, footer_middle, footer_right = st.columns([1.6, 1, 1])
     with footer_left:
         st.caption(
             f"Menampilkan {format_integer(len(filtered))} item dari "
-            f"{format_integer(current_orders)} pesanan • GMV = harga produk + freight"
+            f"{format_integer(current_orders)} pesanan • Product GMV = harga produk; "
+            "AOV = (harga produk + freight) / pesanan"
         )
     with footer_middle:
         with st.expander("Kualitas data"):
-            st.dataframe(model["quality"], hide_index=True, use_container_width=True)
+            st.dataframe(model["quality"], hide_index=True, width="stretch")
     with footer_right:
-        st.download_button(
-            "Unduh hasil filter (.csv)",
-            data=create_order_export(filtered),
-            file_name=f"olist_filtered_{start_date}_{end_date}.csv",
-            mime="text/csv",
-            use_container_width=True,
+        export_signature = (
+            fingerprint,
+            start_ts.isoformat(),
+            end_ts.isoformat(),
+            tuple(customer_states),
+            tuple(categories),
+            tuple(statuses),
+            tuple(seller_states),
         )
+        if st.session_state.get("export_signature") != export_signature:
+            st.session_state.pop("export_data", None)
+
+        export_ready = "export_data" in st.session_state
+        if not export_ready and st.button(
+            "Siapkan file CSV",
+            width="stretch",
+            help="File baru dibuat ketika diminta agar rerun filter tetap ringan.",
+        ):
+            with st.spinner("Menyiapkan file CSV …"):
+                st.session_state["export_data"] = create_order_export(filtered)
+                st.session_state["export_signature"] = export_signature
+            export_ready = True
+
+        if export_ready:
+            st.download_button(
+                "Unduh hasil filter (.csv)",
+                data=st.session_state["export_data"],
+                file_name=f"olist_filtered_{start_date}_{end_date}.csv",
+                mime="text/csv",
+                width="stretch",
+            )
 
 
 if __name__ == "__main__":
