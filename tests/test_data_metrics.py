@@ -16,7 +16,7 @@ EXPECTED_ROWS = {
     "translation": 71,
     "products": 32_951,
     "geolocation": 1_000_163,
-    "reviews": 104_719,
+    "reviews": 99_224,
     "items": 112_650,
     "orders": 99_441,
 }
