@@ -151,17 +151,17 @@ Expected default regression values:
 
 Item berikut berlaku untuk kandidat rilis pada `main`.
 
-- [ ] `git status --short` kosong pada final candidate
-- [ ] `git diff --check` bersih pada final candidate
+- [x] `git status --short` kosong pada final candidate
+- [x] `git diff --check` bersih pada final candidate
 - [x] Test suite hijau
 - [x] Notebook execution hijau
 - [x] Streamlit smoke/regression test hijau
 - [x] Fresh CI checkout dengan Git LFS berhasil
 - [x] Dataset checksum hijau
 - [x] Markdown local-link check hijau
-- [ ] Link eksternal utama diverifikasi manual
+- [x] Link eksternal utama diverifikasi manual
 - [ ] Resource/cold-start deployment check hijau
-- [ ] Reviewer menetapkan keputusan **GO**
+- [x] Reviewer menetapkan keputusan **GO**
 
 ## 12. Merge, tag, dan GitHub Release
 
@@ -169,7 +169,7 @@ Langkah ini hanya boleh dilakukan setelah seluruh item wajib di bagian 11
 selesai.
 
 - [x] Branch finalisasi telah di-merge ke `main`
-- [ ] Final candidate ditarik ulang dari remote
+- [x] Final candidate ditarik ulang dari remote
 - [x] Commit hasil merge dan commit dokumentasi diuji melalui CI
 - [ ] Annotated tag `v2.0.0` dibuat pada commit final
 - [ ] Tag di-push
