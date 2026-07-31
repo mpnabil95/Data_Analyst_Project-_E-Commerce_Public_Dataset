@@ -1,19 +1,20 @@
 # Release Checklist — v2.0.0
 
-Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda
-centang mencerminkan kondisi repository pada 29 Juli 2026, bukan jaminan untuk
-commit yang berubah setelah tanggal tersebut.
+Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang mencerminkan kondisi kandidat rilis pada 31 Juli 2026 dan hanya berlaku untuk commit final yang disebutkan dalam dokumen ini.
 
 ## 1. Identitas rilis
 
-- Target branch pengembangan: `development/v2-finalization`
+- Repository: `mpnabil95/olist-ecommerce-intelligence`
+- Source branch finalisasi: `development/v2-finalization` — sudah di-merge
 - Target branch rilis: `main`
 - Target tag: `v2.0.0`
 - Entry point: `app.py`
 - Target Python: 3.11
-- Status saat checklist diperbarui: **CONDITIONAL NO-GO**
-- Checkpoint: Tahap 10 — quality gate tersedia; eksekusi final pada commit
-  pengguna dan CI masih menunggu
+- Status saat checklist diperbarui: **READY FOR FINAL GO REVIEW**
+- Checkpoint: merge ke `main`, repository rename, deployment ulang,
+  dan CI utama telah selesai; verifikasi lokal akhir dan release hygiene
+  masih menunggu.
+- Candidate commit: latest verified commit on `main`
 - Bukti audit: [`FINAL_AUDIT_REPORT.md`](FINAL_AUDIT_REPORT.md)
 
 ## 2. Source control
@@ -26,7 +27,7 @@ commit yang berubah setelah tanggal tersebut.
 - [x] `geolocation_dataset.csv` menggunakan Git LFS
 - [x] Diff kandidat commit Tahap 8 telah direview
 - [x] Branch finalisasi telah di-push
-- [x] Pull request ke `main` telah dibuat dan direview
+- [x] Branch finalisasi telah di-merge ke `main` melalui merge commit
 - [x] Commit hasil merge telah diverifikasi
 
 ## 3. Data integrity
@@ -40,7 +41,8 @@ commit yang berubah setelah tanggal tersebut.
 - [x] Data dictionary tersedia
 - [x] Atribusi dan lisensi dataset tersedia
 - [ ] Clean clone menjalankan `git lfs pull` dan memverifikasi checksum
-- [ ] Tidak ada CSV turunan, output sensitif, atau file personal dalam paket rilis
+- [x] Tidak ada CSV turunan, output sensitif, atau file personal yang dilacak Git
+- [ ] Arsip/source package GitHub Release diperiksa setelah release dibuat
 
 ## 4. Metric integrity
 
@@ -82,7 +84,7 @@ Expected default regression values:
 - [x] `app.py` dapat dikompilasi
 - [x] Notebook 19/19 code cell dapat dieksekusi
 - [x] Workflow CI mengulangi pemeriksaan environment pada setiap PR ke `main`
-- [ ] Workflow CI hijau pada commit kandidat rilis milik pengguna
+- [x] Workflow CI hijau pada commit kandidat rilis di `main`
 
 ## 6. Dashboard quality
 
@@ -134,7 +136,7 @@ Expected default regression values:
 - [x] Tidak ada output ekspor analitik yang dilacak
 - [x] File konfigurasi tidak mengandung secret
 - [x] Credential-pattern scan tersedia dan audit workspace bersih
-- [ ] Dependency vulnerability scan ditinjau
+- [x] Dependency vulnerability scan ditinjau
 - [ ] Paket/arsip rilis diperiksa agar tidak membawa `.env`, cache, atau file lokal
 
 ## 10. Deployment
@@ -148,18 +150,18 @@ Expected default regression values:
 
 ## 11. Final audit
 
-Item berikut baru boleh dicentang setelah patch Tahap 10 diterapkan dan
-seluruh perintah di `FINAL_AUDIT_REPORT.md` dijalankan pada commit pengguna
-yang sama.
+Item berikut hanya berlaku untuk commit kandidat rilis yang sama.
 
 - [ ] `git status --short` kosong
 - [ ] `git diff --check` bersih
-- [ ] Test suite hijau
-- [ ] Notebook execution hijau
-- [ ] Streamlit smoke/regression test hijau
-- [ ] Clean clone test hijau
-- [ ] Dataset checksum hijau
-- [ ] Documentation link check hijau
+- [x] Test suite hijau
+- [x] Notebook execution hijau
+- [x] Streamlit smoke/regression test hijau
+- [x] Fresh CI checkout dengan Git LFS dan checksum dataset hijau
+- [x] Dataset checksum hijau
+- [x] Markdown local-link check hijau
+- [ ] Link eksternal utama diverifikasi manual
+- [ ] Resource/cold-start check deployment hijau
 - [ ] Reviewer menetapkan keputusan **GO**
 
 ## 12. Merge, tag, dan GitHub Release
@@ -167,7 +169,7 @@ yang sama.
 Langkah ini hanya boleh dilakukan setelah seluruh item wajib di bagian 11
 selesai.
 
-- [ ] PR di-merge ke `main`
+- [x] Branch `development/v2-finalization` telah di-merge ke `main`
 - [ ] `main` ditarik ulang dari remote
 - [ ] Commit merge diuji ulang
 - [ ] Annotated tag `v2.0.0` dibuat pada commit final
@@ -175,7 +177,8 @@ selesai.
 - [ ] GitHub Release dibuat dari tag `v2.0.0`
 - [ ] Release notes mencantumkan fitur, metrik, instalasi, breaking changes,
       data license, dan known limitations
-- [ ] URL dashboard dan aset rilis diverifikasi
+- [x] URL dashboard final telah ditambahkan dan diverifikasi
+- [ ] Aset dan source archive GitHub Release diverifikasi setelah publikasi
 - [ ] Tag dipastikan menunjuk tepat ke commit final di `main`
 
 ## 13. Aturan GO/NO-GO
