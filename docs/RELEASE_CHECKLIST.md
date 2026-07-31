@@ -10,10 +10,8 @@ Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang
 - Target tag: `v2.0.0`
 - Entry point: `app.py`
 - Target Python: 3.11
-- Status saat checklist diperbarui: **GO — TAGGED, RELEASE PUBLICATION PENDING**
-- Checkpoint: final local verification, CI, deployment verification,
-  annotated tag, dan tag push telah selesai; publikasi GitHub Release
-  serta verifikasi source archive masih menunggu.
+- Status saat checklist diperbarui: **RELEASED — v2.0.0**
+- Checkpoint: GitHub Release v2.0.0 telah dipublikasikan dan diverifikasi.
 - Bukti audit: [`FINAL_AUDIT_REPORT.md`](FINAL_AUDIT_REPORT.md)
 
 ## 2. Source control
@@ -41,7 +39,7 @@ Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang
 - [x] Atribusi dan lisensi dataset tersedia
 - [x] Fresh CI checkout dengan Git LFS dan checksum dataset berhasil
 - [x] Tidak ada CSV turunan, output sensitif, atau file personal yang dilacak Git
-- [ ] Arsip/source package GitHub Release diperiksa setelah release dibuat
+- [x] Arsip/source package GitHub Release diperiksa setelah release dibuat
 
 ## 4. Metric integrity
 
@@ -136,7 +134,7 @@ Expected default regression values:
 - [x] File konfigurasi tidak mengandung secret
 - [x] Credential-pattern scan tersedia dan audit workspace bersih
 - [x] Dependency vulnerability scan ditinjau dan hijau
-- [ ] Source archive dan aset release diperiksa agar tidak membawa `.env`, cache, atau file lokal
+- [x] Source archive dan aset release diperiksa agar tidak membawa `.env`, cache, atau file lokal
 
 ## 10. Deployment
 
@@ -173,11 +171,11 @@ selesai.
 - [x] Commit hasil merge dan commit dokumentasi diuji melalui CI
 - [x] Annotated tag `v2.0.0` dibuat pada commit final
 - [x] Tag di-push
-- [ ] GitHub Release dibuat dari tag `v2.0.0`
-- [ ] Release notes mencantumkan fitur, metrik, instalasi, breaking changes,
+- [x] GitHub Release dibuat dari tag `v2.0.0`
+- [x] Release notes mencantumkan fitur, metrik, instalasi, breaking changes,
       data license, dan known limitations
 - [x] URL dashboard final telah ditambahkan dan diverifikasi
-- [ ] Aset dan source archive GitHub Release diverifikasi setelah publikasi
+- [x] Aset dan source archive GitHub Release diverifikasi setelah publikasi
 - [x] Tag dipastikan menunjuk tepat ke commit final di `main`
 
 ## 13. Aturan GO/NO-GO
