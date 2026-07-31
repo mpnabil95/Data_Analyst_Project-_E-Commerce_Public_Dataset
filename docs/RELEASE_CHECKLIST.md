@@ -171,8 +171,8 @@ selesai.
 - [x] Branch finalisasi telah di-merge ke `main`
 - [x] Final candidate ditarik ulang dari remote
 - [x] Commit hasil merge dan commit dokumentasi diuji melalui CI
-- [ ] Annotated tag `v2.0.0` dibuat pada commit final
-- [ ] Tag di-push
+- [x] Annotated tag `v2.0.0` dibuat pada commit final
+- [x] Tag di-push
 - [ ] GitHub Release dibuat dari tag `v2.0.0`
 - [ ] Release notes mencantumkan fitur, metrik, instalasi, breaking changes,
       data license, dan known limitations
