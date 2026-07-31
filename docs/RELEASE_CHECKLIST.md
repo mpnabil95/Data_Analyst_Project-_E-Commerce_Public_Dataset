@@ -10,10 +10,10 @@ Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang
 - Target tag: `v2.0.0`
 - Entry point: `app.py`
 - Target Python: 3.11
-- Status saat checklist diperbarui: **READY FOR FINAL GO REVIEW**
-- Checkpoint: merge ke `main`, repository rename, deployment ulang,
-  dan CI utama telah selesai; verifikasi lokal akhir dan release hygiene
-  masih menunggu.
+- Status saat checklist diperbarui: **GO — TAGGED, RELEASE PUBLICATION PENDING**
+- Checkpoint: final local verification, CI, deployment verification,
+  annotated tag, dan tag push telah selesai; publikasi GitHub Release
+  serta verifikasi source archive masih menunggu.
 - Bukti audit: [`FINAL_AUDIT_REPORT.md`](FINAL_AUDIT_REPORT.md)
 
 ## 2. Source control
@@ -143,7 +143,7 @@ Expected default regression values:
 - [x] Deployment target telah dipilih
 - [x] `app.py` digunakan sebagai main file
 - [x] Git LFS/data availability pada platform target dipastikan
-- [ ] Resource limit diuji pada cold start dan rerun
+- [x] Resource limit diuji pada cold start dan rerun
 - [x] Dashboard health check berhasil pada deployment Tahap 9
 - [x] URL deployment final ditambahkan ke README
 
@@ -160,7 +160,7 @@ Item berikut berlaku untuk kandidat rilis pada `main`.
 - [x] Dataset checksum hijau
 - [x] Markdown local-link check hijau
 - [x] Link eksternal utama diverifikasi manual
-- [ ] Resource/cold-start deployment check hijau
+- [x] Resource/cold-start deployment check hijau
 - [x] Reviewer menetapkan keputusan **GO**
 
 ## 12. Merge, tag, dan GitHub Release
@@ -178,7 +178,7 @@ selesai.
       data license, dan known limitations
 - [x] URL dashboard final telah ditambahkan dan diverifikasi
 - [ ] Aset dan source archive GitHub Release diverifikasi setelah publikasi
-- [ ] Tag dipastikan menunjuk tepat ke commit final di `main`
+- [x] Tag dipastikan menunjuk tepat ke commit final di `main`
 
 ## 13. Aturan GO/NO-GO
 
