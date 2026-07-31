@@ -25,9 +25,9 @@ commit yang berubah setelah tanggal tersebut.
 - [x] File eksperimen dan artefak sementara tidak dilacak
 - [x] `geolocation_dataset.csv` menggunakan Git LFS
 - [x] Diff kandidat commit Tahap 8 telah direview
-- [ ] Branch finalisasi telah di-push
-- [ ] Pull request ke `main` telah dibuat dan direview
-- [ ] Commit hasil merge telah diverifikasi
+- [x] Branch finalisasi telah di-push
+- [x] Pull request ke `main` telah dibuat dan direview
+- [x] Commit hasil merge telah diverifikasi
 
 ## 3. Data integrity
 
@@ -97,8 +97,8 @@ Expected default regression values:
 - [x] Dark theme dikunci melalui `.streamlit/config.toml`
 - [x] Smoke test Streamlit tersimpan di repository
 - [x] Test filter, empty-state, dan lima bagian tersimpan di repository
-- [ ] Layout desktop dan mobile diperiksa dari build kandidat rilis
-- [ ] Seluruh tombol download dan tooltip diverifikasi
+- [x] Layout desktop dan mobile diperiksa dari build kandidat rilis
+- [x] Seluruh tombol download dan tooltip diverifikasi
 
 ## 7. Notebook quality
 
@@ -108,8 +108,8 @@ Expected default regression values:
 - [x] Environment metadata menggunakan Python 3.11
 - [x] Pertanyaan bisnis, interpretasi, rekomendasi, dan batasan tersedia
 - [x] Tidak terdapat path atau interpreter ID spesifik mesin
-- [ ] Notebook dieksekusi ulang dari clean clone kandidat rilis
-- [ ] Output notebook dibandingkan dengan KPI dashboard kandidat rilis
+- [x] Notebook dieksekusi ulang dari clean clone kandidat rilis
+- [x] Output notebook dibandingkan dengan KPI dashboard kandidat rilis
 
 ## 8. Documentation and licensing
 
