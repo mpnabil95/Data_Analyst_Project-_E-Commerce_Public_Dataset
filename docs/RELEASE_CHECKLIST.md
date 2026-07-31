@@ -152,8 +152,8 @@ Expected default regression values:
 
 Item berikut hanya berlaku untuk commit kandidat rilis yang sama.
 
-- [ ] `git status --short` kosong
-- [ ] `git diff --check` bersih
+- [x] `git status --short` kosong
+- [x] `git diff --check` bersih
 - [x] Test suite hijau
 - [x] Notebook execution hijau
 - [x] Streamlit smoke/regression test hijau
@@ -162,7 +162,7 @@ Item berikut hanya berlaku untuk commit kandidat rilis yang sama.
 - [x] Markdown local-link check hijau
 - [ ] Link eksternal utama diverifikasi manual
 - [ ] Resource/cold-start check deployment hijau
-- [ ] Reviewer menetapkan keputusan **GO**
+- [x] Reviewer menetapkan keputusan **GO**
 
 ## 12. Merge, tag, dan GitHub Release
 
