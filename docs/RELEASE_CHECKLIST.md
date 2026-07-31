@@ -14,7 +14,6 @@ Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang
 - Checkpoint: merge ke `main`, repository rename, deployment ulang,
   dan CI utama telah selesai; verifikasi lokal akhir dan release hygiene
   masih menunggu.
-- Candidate commit: latest verified commit on `main`
 - Bukti audit: [`FINAL_AUDIT_REPORT.md`](FINAL_AUDIT_REPORT.md)
 
 ## 2. Source control
@@ -40,7 +39,7 @@ Checklist ini adalah sumber keputusan GO/NO-GO untuk rilis v2.0.0. Tanda centang
 - [x] Koordinat di luar bounding box Brasil dikeluarkan sebelum median
 - [x] Data dictionary tersedia
 - [x] Atribusi dan lisensi dataset tersedia
-- [ ] Clean clone menjalankan `git lfs pull` dan memverifikasi checksum
+- [x] Fresh CI checkout dengan Git LFS dan checksum dataset berhasil
 - [x] Tidak ada CSV turunan, output sensitif, atau file personal yang dilacak Git
 - [ ] Arsip/source package GitHub Release diperiksa setelah release dibuat
 
@@ -136,8 +135,8 @@ Expected default regression values:
 - [x] Tidak ada output ekspor analitik yang dilacak
 - [x] File konfigurasi tidak mengandung secret
 - [x] Credential-pattern scan tersedia dan audit workspace bersih
-- [x] Dependency vulnerability scan ditinjau
-- [ ] Paket/arsip rilis diperiksa agar tidak membawa `.env`, cache, atau file lokal
+- [x] Dependency vulnerability scan ditinjau dan hijau
+- [ ] Source archive dan aset release diperiksa agar tidak membawa `.env`, cache, atau file lokal
 
 ## 10. Deployment
 
@@ -150,28 +149,28 @@ Expected default regression values:
 
 ## 11. Final audit
 
-Item berikut hanya berlaku untuk commit kandidat rilis yang sama.
+Item berikut berlaku untuk kandidat rilis pada `main`.
 
-- [x] `git status --short` kosong
-- [x] `git diff --check` bersih
+- [ ] `git status --short` kosong pada final candidate
+- [ ] `git diff --check` bersih pada final candidate
 - [x] Test suite hijau
 - [x] Notebook execution hijau
 - [x] Streamlit smoke/regression test hijau
-- [x] Fresh CI checkout dengan Git LFS dan checksum dataset hijau
+- [x] Fresh CI checkout dengan Git LFS berhasil
 - [x] Dataset checksum hijau
 - [x] Markdown local-link check hijau
 - [ ] Link eksternal utama diverifikasi manual
-- [ ] Resource/cold-start check deployment hijau
-- [x] Reviewer menetapkan keputusan **GO**
+- [ ] Resource/cold-start deployment check hijau
+- [ ] Reviewer menetapkan keputusan **GO**
 
 ## 12. Merge, tag, dan GitHub Release
 
 Langkah ini hanya boleh dilakukan setelah seluruh item wajib di bagian 11
 selesai.
 
-- [x] Branch `development/v2-finalization` telah di-merge ke `main`
-- [ ] `main` ditarik ulang dari remote
-- [ ] Commit merge diuji ulang
+- [x] Branch finalisasi telah di-merge ke `main`
+- [ ] Final candidate ditarik ulang dari remote
+- [x] Commit hasil merge dan commit dokumentasi diuji melalui CI
 - [ ] Annotated tag `v2.0.0` dibuat pada commit final
 - [ ] Tag di-push
 - [ ] GitHub Release dibuat dari tag `v2.0.0`
