@@ -249,8 +249,8 @@ seluruh 52 kolom sumber tersedia pada
 ### 1. Clone dan ambil data LFS
 
 ```bash
-git clone https://github.com/mpnabil95/Data_Analyst_Project_E-Commerce_Public_Dataset.git
-cd Data_Analyst_Project_E-Commerce_Public_Dataset
+git clone https://github.com/mpnabil95/olist-ecommerce-intelligence.git
+cd olist-ecommerce-intelligence
 git lfs install
 git lfs pull
 ```
@@ -316,7 +316,7 @@ Konfigurasi deployment yang digunakan:
 
 | Pengaturan | Nilai |
 |---|---|
-| Repository | `mpnabil95/Data_Analyst_Project_E-Commerce_Public_Dataset` |
+| Repository | `mpnabil95/olist-ecommerce-intelligence` |
 | Main file | `app.py` |
 | Python | 3.11 |
 | Secrets | Tidak diperlukan |
