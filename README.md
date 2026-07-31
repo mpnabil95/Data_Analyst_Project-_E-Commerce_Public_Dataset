@@ -14,7 +14,7 @@ analisis yang dapat direproduksi pada level order dan item, lalu menyajikan
 KPI, tren, geografi customer, performa produk dan seller, kualitas layanan,
 RFM, serta cohort retention melalui Streamlit.
 
-[**Buka dashboard live**](https://dataanalystprojecte-commercepublicdataset-drsyv7bhu37npqoeey47.streamlit.app/)
+[**Buka dashboard live**](https://olist-ecommerce-intelligence-95.streamlit.app/)
 · [**Lihat notebook**](notebooks/ecommerce_analysis.ipynb)
 · [**Baca metodologi**](docs/METHODOLOGY.md)
 · [**Lihat data dictionary**](docs/DATA_DICTIONARY.md)
