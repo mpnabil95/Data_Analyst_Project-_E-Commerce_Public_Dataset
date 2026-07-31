@@ -323,7 +323,7 @@ Konfigurasi deployment yang digunakan:
 | Dependency | `requirements.txt` |
 
 Dashboard publik:
-[dataanalystprojecte-commercepublicdataset-drsyv7bhu37npqoeey47.streamlit.app](https://dataanalystprojecte-commercepublicdataset-drsyv7bhu37npqoeey47.streamlit.app/)
+[olist-ecommerce-intelligence-95.streamlit.app](https://olist-ecommerce-intelligence-95.streamlit.app/)
 
 Untuk deployment baru, pastikan sembilan CSV dapat diambil melalui Git LFS dan
 working directory tetap berada pada root repository.
